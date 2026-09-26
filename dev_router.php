@@ -7,6 +7,13 @@
 $docroot = __DIR__ . '/public_html';
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
 
+// MCP Server Card は /.well-known 配下にあるため、ドットで始まるパスの拒否より先に処理する
+if (preg_match('#^/\.well-known/mcp/server-card\.json$|^/mcp/server-card/?$#', $path)) {
+    chdir($docroot);
+    require "$docroot/server_card.php";
+    return true;
+}
+
 if (preg_match('#^/data(/|$)#', $path) || preg_match('#/(config|db|helpers|layout|sandbox|analysis_core)\.php$#', $path) || preg_match('#\.(sqlite|cache|log|tmp)$|/\.#', $path)) {
     http_response_code(403);
     exit('Forbidden');
@@ -15,6 +22,7 @@ if (preg_match('#^/data(/|$)#', $path) || preg_match('#/(config|db|helpers|layou
 $routes = [
     '#^/robots\.txt$#'                               => fn($m) => ['robots.php', []],
     '#^/sitemap\.xml$#'                              => fn($m) => ['sitemap.php', []],
+    '#^/sitemap\.html$#'                             => fn($m) => ['sitemap_page.php', []],
     '#^/api/v1/sandbox/submit/?$#'                   => fn($m) => ['api/sandbox_submit.php', []],
     '#^/api/v1/threads/?$#'                          => fn($m) => ['api/threads.php', []],
     '#^/api/v1/threads/([0-9]+)/?$#'                 => fn($m) => ['api/thread.php', ['id' => $m[1]]],

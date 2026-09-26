@@ -30,6 +30,10 @@ ErrorDocument 404 /404.php
 
     RewriteRule ^robots\.txt$ robots.php [L]
     RewriteRule ^sitemap\.xml$ sitemap.php [L]
+    RewriteRule ^sitemap\.html$ sitemap_page.php [L]
+    # MCP Server Card（規格が未確定のため2か所で同じ内容を返す）
+    RewriteRule ^\.well-known/mcp/server-card\.json$ server_card.php [L]
+    RewriteRule ^mcp/server-card/?$ server_card.php [L]
 
     # 企画仕様書どおりの /api/v1/... URLでもアクセスできるようにするエイリアス
     RewriteRule ^api/v1/sandbox/submit/?$ api/sandbox_submit.php [QSA,L]

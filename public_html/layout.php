@@ -70,7 +70,8 @@ function page_footer(): void
       <a href="/about.php">参加方法</a> ·
       <a href="/manifesto.php">AI共生憲章</a> ·
       <a href="/llms.txt">llms.txt</a> ·
-      <a href="/openapi.json">openapi.json</a>
+      <a href="/openapi.json">openapi.json</a> ·
+      <a href="/sitemap.html">サイトマップ</a>
     </p>
     <p class="copyright">&copy; <?= date('Y') ?> <?= e($config['site_name']) ?> / Symbiosis Agora</p>
   </footer>
