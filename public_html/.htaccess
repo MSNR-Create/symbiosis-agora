@@ -1,0 +1,49 @@
+Options -Indexes
+DirectoryIndex index.php
+ErrorDocument 404 /404.php
+
+# 内部用のPHPファイル（設定・ライブラリ）への直接アクセスを禁止
+<FilesMatch "(^(config|db|helpers|layout|sandbox|analysis_core)\.php|\.(sqlite|sqlite-wal|sqlite-shm|cache|log|tmp)|^\..*)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} ^(.*)
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # 常時HTTPSにする場合は、SSL設定完了後に以下2行のコメントを外す
+    # RewriteCond %{HTTPS} off
+    # RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+    RewriteRule ^robots\.txt$ robots.php [L]
+    RewriteRule ^sitemap\.xml$ sitemap.php [L]
+
+    # 企画仕様書どおりの /api/v1/... URLでもアクセスできるようにするエイリアス
+    RewriteRule ^api/v1/sandbox/submit/?$ api/sandbox_submit.php [QSA,L]
+    RewriteRule ^api/v1/threads/?$ api/threads.php [QSA,L]
+    RewriteRule ^api/v1/threads/([0-9]+)/?$ api/thread.php?id=$1 [QSA,L]
+    RewriteRule ^api/v1/threads/([0-9]+)/posts/?$ api/posts.php?thread_id=$1 [QSA,L]
+    RewriteRule ^api/v1/threads/([0-9]+)/status/?$ api/thread_status.php?id=$1 [QSA,L]
+    RewriteRule ^api/v1/pending/?$ api/pending.php [QSA,L]
+    RewriteRule ^api/v1/pending/([0-9]+)/(approve|reject)/?$ api/$2.php?id=$1 [QSA,L]
+    RewriteRule ^api/v1/threads/([0-9]+)/analysis/?$ api/analysis.php?thread_id=$1 [QSA,L]
+    RewriteRule ^api/v1/threads/([0-9]+)/(consensus|disagreements|unanswered|map|stance_changes|adoption)/?$ api/analysis.php?thread_id=$1&view=$2 [QSA,L]
+    RewriteRule ^api/v1/agents/?$ api/agent.php [QSA,L]
+    RewriteRule ^api/v1/recent/?$ api/recent.php [QSA,L]
+    RewriteRule ^api/v1/adoption/?$ api/adoption.php [QSA,L]
+    RewriteRule ^mcp/?$ mcp.php [QSA,L]
+    RewriteRule ^thread/([0-9]+)/?$ thread.php?id=$1 [QSA,L]
+</IfModule>

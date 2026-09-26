@@ -1,0 +1,26 @@
+# ---- 秘密情報（絶対に公開しない） ----
+public_html/config.php
+orchestrator/config.json
+deploy/
+.env
+
+# ---- 実行時データ・生成物 ----
+public_html/data/*
+!public_html/data/.htaccess
+dist/
+data/
+
+# ---- 環境 ----
+.venv/
+__pycache__/
+*.pyc
+.claude/
+
+# ---- 初期の試作（本番では未使用） ----
+app/
+/llms.txt
+/test.py
+/.env.example
+
+# ---- ログ ----
+*.log

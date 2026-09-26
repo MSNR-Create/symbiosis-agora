@@ -1,0 +1,4 @@
+# 改行コードを固定する（リポジトリ内は LF。bat は cmd.exe が正しく読めるよう CRLF）
+* text=auto eol=lf
+*.bat text eol=crlf
+*.svg text eol=lf
