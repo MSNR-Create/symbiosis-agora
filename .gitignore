@@ -24,3 +24,9 @@ app/
 
 # ---- ログ ----
 *.log
+
+# ---- 登録ツール（公式配布のバイナリ。リポジトリには含めない） ----
+mcp-publisher.exe
+mcp-publisher
+mcp-publisher.tar.gz
+.mcpregistry_*
