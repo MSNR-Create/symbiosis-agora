@@ -119,7 +119,7 @@ class Job:
 
     # ---- LLM呼び出し（VRAM管理つき） ----
 
-    def llm(self, model: str, system: str, user: str, *, keep_loaded: bool = False) -> str:
+    def llm(self, model: str, system: str, user: str, *, keep_loaded: bool = False, schema: dict | None = None) -> str:
         self.check_cancel()
         self.current_model = model
         self.current_text = ""
@@ -133,6 +133,7 @@ class Job:
             keep_alive=KEEP_WHILE_REUSED if keep_loaded else 0,
             cancel=self.cancel,
             on_token=on_token,
+            schema=schema,
         )
 
     def unload(self, model: str) -> None:
@@ -471,6 +472,33 @@ SYNTHESIS_SYSTEM_PROMPT = """あなたは公開フォーラム「Symbiosis Agora
 """
 
 
+_SYNTHESIS_REQUIRED = ("summary", "revised_rule", "revised_why")
+SYNTHESIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "revised_rule": {"type": "string"},
+        "revised_why": {"type": "string"},
+        "new_title": {"type": "string"},
+        "recommendation": {"type": "string", "enum": ["adopt_revised", "repropose"]},
+        "recommendation_reason": {"type": "string"},
+    },
+    "required": [*_SYNTHESIS_REQUIRED, "new_title", "recommendation", "recommendation_reason"],
+}
+
+
+def unwrap_result(result, required: tuple[str, ...]) -> dict:
+    """必須キーが外側になく、1段内側のオブジェクトにある形（{"result": {...}} 等）なら取り出す"""
+    if not isinstance(result, dict):
+        return {}
+    if any(k in result for k in required):
+        return result
+    for value in result.values():
+        if isinstance(value, dict) and any(k in value for k in required):
+            return value
+    return result
+
+
 def build_synthesis_user_prompt(thread: dict, posts: list, analysis: dict) -> str:
     lines = [
         f"議題: {thread['title']}",
@@ -517,10 +545,16 @@ class SynthesisJob(Job):
         result, problem = None, ""
         for attempt in (1, 2):
             try:
-                result = parse_model_json(self.llm(self.model, SYNTHESIS_SYSTEM_PROMPT,
-                                                   build_synthesis_user_prompt(thread, posts, analysis), keep_loaded=True))
-                missing = [k for k in ("summary", "revised_rule", "revised_why") if not str(result.get(k) or "").strip()]
-                problem = f"必須項目がありません: {', '.join(missing)}" if missing else ""
+                raw = self.llm(self.model, SYNTHESIS_SYSTEM_PROMPT, build_synthesis_user_prompt(thread, posts, analysis),
+                               keep_loaded=True, schema=SYNTHESIS_SCHEMA)
+                result = unwrap_result(parse_model_json(raw), _SYNTHESIS_REQUIRED)
+                missing = [k for k in _SYNTHESIS_REQUIRED if not str(result.get(k) or "").strip()]
+                if missing:
+                    # 原因を突き止められるよう、実際に返ってきた項目と出力の冒頭を添える
+                    got = ", ".join(result) or "なし"
+                    problem = f"必須項目がありません: {', '.join(missing)}（返ってきた項目: {got} / 出力の冒頭: {raw.strip()[:160]!r}）"
+                else:
+                    problem = ""
             except ollama.Cancelled:
                 raise
             except Exception as exc:  # noqa: BLE001

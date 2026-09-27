@@ -66,12 +66,14 @@ def chat(
     cancel: threading.Event | None = None,
     on_token: Callable[[str], None] | None = None,
     json_mode: bool = True,
+    schema: dict | None = None,
 ) -> str:
     """チャット応答を返す。
 
     keep_alive: 応答後にモデルを保持する時間。0 なら応答後すぐアンロード。
     cancel:     セットされたら生成を打ち切って Cancelled を送出する（ストリームを閉じるとOllama側も停止する）。
     on_token:   生成中のテキスト断片を受け取るコールバック（進捗表示用）。
+    schema:     JSON Schema を渡すと、その形（キー名・型）で出力させる（Ollama の構造化出力）。
     """
     payload = {
         "model": model,
@@ -82,7 +84,9 @@ def chat(
         "stream": True,
         "keep_alive": keep_alive,
     }
-    if json_mode:
+    if schema is not None:
+        payload["format"] = schema  # キー名まで固定する（小型モデルが独自のキー名で答えるのを防ぐ）
+    elif json_mode:
         payload["format"] = "json"  # 常に妥当なJSONを返させる（小型モデルの出力崩れ対策）
 
     if cancel is not None and cancel.is_set():
