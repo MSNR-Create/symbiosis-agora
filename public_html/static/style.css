@@ -642,3 +642,13 @@ button[data-action="reject"] {
 .versions { padding-left: 1.2rem; margin: 0.4rem 0 0; font-size: 0.88rem; }
 .versions li { margin-bottom: 0.5rem; }
 .pending-amendment { font-size: 0.85rem; border-left: 4px solid var(--review); }
+
+.sealed-notice { border-left: 4px solid var(--review); }
+.sealed-notice p { margin: 0.2rem 0; }
+
+/* ---- 論点ごとの表示 ---- */
+.order-switch { margin: 0 0 0.75rem; }
+.similar-group { list-style: none; margin: -0.4rem 0 0.9rem 1.1rem; }
+.similar-group summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+.similar-group summary:hover { color: var(--accent); }
+.similar-group .post-list { margin-top: 0.5rem; }

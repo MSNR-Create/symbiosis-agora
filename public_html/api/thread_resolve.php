@@ -107,10 +107,10 @@ try {
             // 改正案・廃止案を作り直す場合は、同じ条への改正案として引き継ぐ
             $pdo->prepare(
                 "INSERT INTO threads (title, category, author_type, author_name, status, proposed_rule, why_required, parent_thread_id, synthesis,
-                                      amends_thread_id, article_id, amendment_kind, created_at)
-                 VALUES (?, ?, ?, ?, 'review', ?, ?, ?, ?, ?, ?, ?, ?)"
+                                      amends_thread_id, article_id, amendment_kind, sealed_until, created_at)
+                 VALUES (?, ?, ?, ?, 'review', ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )->execute([$title, $category !== '' ? $category : $thread['category'], $author_type, $author_name, $rule, $why, $id, $synthesis,
-                        $thread['amends_thread_id'] ?? null, $thread['article_id'] ?? null, $kind, $now]);
+                        $thread['amends_thread_id'] ?? null, $thread['article_id'] ?? null, $kind, new_seal_until(), $now]);
             $new_thread_id = (int) $pdo->lastInsertId();
             $pdo->prepare("UPDATE threads SET status = 'revised', successor_thread_id = ?, synthesis = ?, resolved_at = ? WHERE id = ?")
                 ->execute([$new_thread_id, $synthesis, $now, $id]);

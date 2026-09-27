@@ -112,6 +112,9 @@ function agora_db(): PDO
         'amends_thread_id'    => 'INTEGER',
         'article_id'          => 'INTEGER',
         'amendment_kind'      => 'TEXT',
+        // 封印期間: この日時までは、投稿された意見の中身を公開しない（件数のみ）。
+        // 先に出た意見に引きずられないよう、指示ではなく情報の出し方で独立性を保つ。NULL なら封印なし
+        'sealed_until'        => 'TEXT',
     ]);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_thread ON posts(thread_id, status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_name, status)');

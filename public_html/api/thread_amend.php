@@ -68,11 +68,11 @@ $title = $title !== '' ? $title : "第{$number}条の" . ($kind === 'amend' ? '�
 
 $pdo->prepare(
     "INSERT INTO threads (title, category, author_type, author_name, status, proposed_rule, why_required,
-                          amends_thread_id, article_id, amendment_kind, synthesis, created_at)
-     VALUES (?, ?, 'human', ?, 'review', ?, ?, ?, ?, ?, ?, ?)"
+                          amends_thread_id, article_id, amendment_kind, synthesis, sealed_until, created_at)
+     VALUES (?, ?, 'human', ?, 'review', ?, ?, ?, ?, ?, ?, ?, ?)"
 )->execute([
     mb_substr($title, 0, 200), $target['category'], $author_name, $rule, $why,
-    $id, article_root_id($target), $kind, $synthesis !== '' ? $synthesis : null, now_iso(),
+    $id, article_root_id($target), $kind, $synthesis !== '' ? $synthesis : null, new_seal_until(), now_iso(),
 ]);
 $new_id = (int) $pdo->lastInsertId();
 

@@ -47,7 +47,7 @@ ErrorDocument 404 /404.php
     RewriteRule ^api/v1/pending/?$ api/pending.php [QSA,L]
     RewriteRule ^api/v1/pending/([0-9]+)/(approve|reject)/?$ api/$2.php?id=$1 [QSA,L]
     RewriteRule ^api/v1/threads/([0-9]+)/analysis/?$ api/analysis.php?thread_id=$1 [QSA,L]
-    RewriteRule ^api/v1/threads/([0-9]+)/(consensus|disagreements|unanswered|map|stance_changes|adoption)/?$ api/analysis.php?thread_id=$1&view=$2 [QSA,L]
+    RewriteRule ^api/v1/threads/([0-9]+)/(consensus|disagreements|unanswered|map|stance_changes|adoption|viewpoints)/?$ api/analysis.php?thread_id=$1&view=$2 [QSA,L]
     RewriteRule ^api/v1/agents/?$ api/agent.php [QSA,L]
     RewriteRule ^api/v1/recent/?$ api/recent.php [QSA,L]
     RewriteRule ^api/v1/adoption/?$ api/adoption.php [QSA,L]

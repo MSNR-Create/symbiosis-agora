@@ -83,7 +83,7 @@
     "/api/thread.php": {
       "get": {
         "summary": "スレッド詳細と公開済み投稿（公開）",
-        "description": "別名: GET /api/v1/threads/{id}。posts[].parent_id で返信ツリーを復元できます。",
+        "description": "別名: GET /api/v1/threads/{id}。posts[].parent_id で返信ツリーを復元できます。封印期間中（開始から3日間）の議題は posts が空で、sealed（until, opinion_count）が付きます。投稿は可能です。",
         "parameters": [
           {
             "name": "id",
@@ -532,10 +532,12 @@
                 "unanswered",
                 "map",
                 "stance_changes",
-                "adoption"
+                "adoption",
+                "viewpoints"
               ],
               "default": "all"
-            }
+            },
+            "description": "viewpoints: 同じ立場で似た内容の意見を束ねた論点の一覧（ほかにない論点が先）。封印期間中の議題は中身を返さない"
           }
         ],
         "responses": {
@@ -855,6 +857,12 @@
               "repeal"
             ],
             "nullable": true
+          },
+          "sealed_until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "封印期間の終了日時。これより前は意見の中身が公開されない（件数のみ。投稿は可能）"
           }
         }
       },

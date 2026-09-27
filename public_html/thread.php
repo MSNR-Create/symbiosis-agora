@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/layout.php';
 require_once __DIR__ . '/analysis_core.php';
-page_cache(['id']);
+page_cache(['id', 'order']);
 $pdo = agora_db();
 
 $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
@@ -19,6 +19,12 @@ $stmt = $pdo->prepare(
 );
 $stmt->execute([$id]);
 $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// 封印期間中は意見の中身を見せない（件数だけ）
+$sealed = thread_is_sealed($thread);
+$sealed_count = count($posts);
+if ($sealed) {
+    $posts = [];
+}
 
 // 考えを変えた投稿（投稿ID → 変化の内容）
 $journeys = stance_journeys($posts);
@@ -47,6 +53,31 @@ function render_post_tree(array $children, int $parent_id, int $depth, array $ch
     }
     echo '<ul class="' . ($depth === 0 ? 'post-list' : 'post-replies') . '">';
     foreach ($children[$parent_id] as $p) {
+        render_post_item($p, $children, $depth, $changed_at);
+    }
+    echo '</ul>';
+}
+
+/** 論点ごとに表示する: 独自の論点を先に、同じ趣旨の意見は代表の下に畳む */
+function render_viewpoints(array $groups, array $children, array $changed_at): void
+{
+    echo '<ul class="post-list">';
+    foreach ($groups as $g) {
+        render_post_item($g['representative'], $children, 0, $changed_at);
+        if ($g['members']) {
+            $ids = implode('、', array_map(fn($m) => '#' . (int) $m['id'], $g['members']));
+            echo '<li class="similar-group"><details><summary>同じ趣旨の意見 ' . count($g['members']) . ' 件（' . e($ids) . '）</summary><ul class="post-list">';
+            foreach ($g['members'] as $m) {
+                render_post_item($m, $children, 0, $changed_at);
+            }
+            echo '</ul></details></li>';
+        }
+    }
+    echo '</ul>';
+}
+
+function render_post_item(array $p, array $children, int $depth, array $changed_at): void
+{
         $pid = (int) $p['id'];
         ?>
         <li class="post-item">
@@ -82,9 +113,12 @@ function render_post_tree(array $children, int $parent_id, int $depth, array $ch
           <?php render_post_tree($children, $pid, $depth + 1, $changed_at); ?>
         </li>
         <?php
-    }
-    echo '</ul>';
 }
+
+// 表示順: 既定は論点ごと（独自の論点を先に、同じ趣旨は畳む）。?order=time で時系列
+$order = ($_GET['order'] ?? '') === 'time' ? 'time' : 'viewpoints';
+$top_level = array_map(fn($p) => ($p['parent_id'] !== null && !isset($by_id[$p['parent_id']])) ? ['parent_id' => null] + $p : $p, $posts);
+$groups = $order === 'viewpoints' ? opinion_groups($top_level) : [];
 
 page_header([
     'title' => $thread['title'],
@@ -164,7 +198,14 @@ page_header([
     </article>
 
     <section class="section">
-      <h2>意見 (<?= count($posts) ?>)</h2>
+      <h2>意見 (<?= $sealed ? (int) $sealed_count : count($posts) ?>)</h2>
+      <?php if ($sealed): ?>
+        <div class="notice sealed-notice">
+          <p><strong>封印期間中</strong>（<?= e(format_date($thread['sealed_until'])) ?> まで）</p>
+          <p class="meta">議論の開始から<?= SEAL_DAYS ?>日間は、投稿された意見の中身を誰にも公開しません（件数のみ）。
+            先に出た意見に引きずられず、参加者それぞれが独立して考えるための仕組みです。この期間も投稿はできます。</p>
+        </div>
+      <?php endif; ?>
       <?php render_stance_bar(stance_counts($posts)); ?>
       <?php if ($posts): ?>
         <div class="discussion-status">
@@ -181,10 +222,22 @@ page_header([
           <?php endif; ?>
         </div>
       <?php endif; ?>
-      <?php if (!$posts): ?>
+      <?php if (!$posts && !$sealed): ?>
         <p class="empty">まだ意見がありません。</p>
       <?php else: ?>
-        <?php render_post_tree($children, 0, 0, $changed_at); ?>
+        <p class="order-switch meta">
+          <?php if ($order === 'viewpoints'): ?>
+            表示：<strong>論点ごと</strong>（ほかにない論点を先に、同じ趣旨の意見は畳んで表示） ·
+            <a href="/thread.php?id=<?= (int) $thread['id'] ?>&amp;order=time">時系列で表示</a>
+          <?php else: ?>
+            表示：<strong>時系列</strong> · <a href="/thread.php?id=<?= (int) $thread['id'] ?>">論点ごとに表示</a>
+          <?php endif; ?>
+        </p>
+        <?php if ($order === 'viewpoints') {
+            render_viewpoints($groups, $children, $changed_at);
+        } else {
+            render_post_tree($children, 0, 0, $changed_at);
+        } ?>
       <?php endif; ?>
     </section>
 

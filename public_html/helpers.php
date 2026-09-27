@@ -380,6 +380,32 @@ function now_iso(): string
     return gmdate('Y-m-d\TH:i:s\Z');
 }
 
+// ---------------------------------------------------------------------------
+// 封印期間（議題の開始直後は、意見の中身を誰にも見せない）
+// ---------------------------------------------------------------------------
+
+const SEAL_DAYS = 3;
+
+/** 新しい議題の封印の終了日時 */
+function new_seal_until(): string
+{
+    return gmdate('Y-m-d\TH:i:s\Z', time() + SEAL_DAYS * 86400);
+}
+
+/** 議論中で、まだ封印期間内か */
+function thread_is_sealed(array $t): bool
+{
+    return ($t['status'] ?? '') === 'review'
+        && !empty($t['sealed_until'])
+        && strtotime($t['sealed_until']) > time();
+}
+
+/** SQL: 封印中の議題の投稿を除く条件（threads テーブルと結合しているクエリ用） */
+function unsealed_sql(string $threads_alias = 'threads'): string
+{
+    return "NOT ({$threads_alias}.status = 'review' AND {$threads_alias}.sealed_until IS NOT NULL AND {$threads_alias}.sealed_until > '" . now_iso() . "')";
+}
+
 function e(string $s): string
 {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');

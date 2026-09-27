@@ -75,6 +75,8 @@ function thread_summary(array $t, ?int $post_count = null): array
         'amends_thread_id' => isset($t['amends_thread_id']) ? (int) $t['amends_thread_id'] : null,
         'amendment_kind'   => $t['amendment_kind'] ?? null,
         'opinion_count' => $post_count,
+        'sealed'        => thread_is_sealed($t) ?: null,
+        'sealed_until'  => thread_is_sealed($t) ? $t['sealed_until'] : null,
         'created_at'    => $t['created_at'],
         'url'           => site_url('/thread.php?id=' . (int) $t['id']),
     ], fn($v) => $v !== null);
@@ -89,11 +91,14 @@ function load_thread(PDO $pdo, int $thread_id): ?array
     if (!$thread) {
         return null;
     }
+    if (thread_is_sealed($thread)) {
+        return ['thread' => $thread, 'posts' => [], 'sealed' => true];   // 封印期間中は中身を返さない（件数は thread_summary で出す）
+    }
     $stmt = $pdo->prepare(
         "SELECT * FROM posts WHERE thread_id = ? AND status = 'published' ORDER BY datetime(created_at) ASC, id ASC"
     );
     $stmt->execute([$thread_id]);
-    return ['thread' => $thread, 'posts' => $stmt->fetchAll(PDO::FETCH_ASSOC)];
+    return ['thread' => $thread, 'posts' => $stmt->fetchAll(PDO::FETCH_ASSOC), 'sealed' => false];
 }
 
 /** 投稿ID → その投稿への返信の配列 */
@@ -259,6 +264,84 @@ function unanswered_arguments(array $posts, int $limit = 10): array
     $open = array_values(array_filter($posts, fn($p) => empty($children[(int) $p['id']])));
     usort($open, fn($a, $b) => [$priority[$a['stance']] ?? 3, (int) $a['id']] <=> [$priority[$b['stance']] ?? 3, (int) $b['id']]);
     return array_map('post_summary', array_slice($open, 0, $limit));
+}
+
+// ---------------------------------------------------------------------------
+// 同じ趣旨の意見のまとまり（表示の仕方で同調を不利にし、独自の論点を目立たせる）
+// ---------------------------------------------------------------------------
+
+// 文字2-gramのJaccard係数がこれ以上、かつ同じ立場なら「同じ趣旨」とみなす。
+// 本番の議論（重複の多い16件）で測定: 言い換えの繰り返しは 0.28〜0.50、中央値 0.10、独自の論点は 0.02〜0.03
+const SIMILARITY_THRESHOLD = 0.30;
+
+function char_bigrams(string $text): array
+{
+    $t = preg_replace('/[\s、。，．,.!?！？「」『』（）()・:：;；\-—…]+/u', '', mb_strtolower($text));
+    $chars = mb_str_split($t);
+    $grams = [];
+    for ($i = 0, $n = count($chars) - 1; $i < $n; $i++) {
+        $grams[$chars[$i] . $chars[$i + 1]] = true;
+    }
+    return $grams;
+}
+
+function jaccard(array $a, array $b): float
+{
+    if (!$a || !$b) {
+        return 0.0;
+    }
+    $inter = count(array_intersect_key($a, $b));
+    return $inter / (count($a) + count($b) - $inter);
+}
+
+/**
+ * トップレベルの意見を「同じ趣旨のまとまり」に分ける（LLMは使わない）。
+ * 最初に出た意見を代表とし、同じ立場で似た意見をその下に束ねる。
+ * 並び順: まとまりの小さい（独自の）論点 → 少数派の立場 → 古い順。
+ * 同じことを繰り返すほど後ろに回り、ほかにない論点ほど前に出る。
+ */
+function opinion_groups(array $posts): array
+{
+    $top = array_values(array_filter($posts, fn($p) => $p['parent_id'] === null));
+    $groups = [];
+    foreach ($top as $p) {
+        $g = char_bigrams($p['opinion']);
+        $placed = false;
+        foreach ($groups as &$grp) {
+            if ($grp['stance'] !== $p['stance']) {
+                continue;
+            }
+            foreach ($grp['grams'] as $mg) {
+                if (jaccard($g, $mg) >= SIMILARITY_THRESHOLD) {
+                    $grp['members'][] = $p;
+                    $grp['grams'][] = $g;
+                    $placed = true;
+                    break 2;
+                }
+            }
+        }
+        unset($grp);
+        if (!$placed) {
+            $groups[] = ['stance' => $p['stance'], 'representative' => $p, 'members' => [], 'grams' => [$g]];
+        }
+    }
+    // 立場ごとの参加者数（少ないほど先に表示）
+    $share = consensus($posts)['participant_stances'];
+    usort($groups, fn($a, $b) =>
+        [count($a['members']), $share[$a['stance']] ?? 0, (int) $a['representative']['id']]
+        <=> [count($b['members']), $share[$b['stance']] ?? 0, (int) $b['representative']['id']]);
+    return array_map(fn($g) => array_diff_key($g, ['grams' => 1]), $groups);
+}
+
+/** API・MCP用: 論点のまとまり（代表の意見と、同趣旨の意見のID） */
+function viewpoints(array $posts): array
+{
+    return array_map(fn($g) => [
+        'stance'         => $g['stance'],
+        'representative' => post_summary($g['representative']),
+        'similar_ids'    => array_map(fn($p) => (int) $p['id'], $g['members']),
+        'size'           => 1 + count($g['members']),
+    ], opinion_groups($posts));
 }
 
 // ---------------------------------------------------------------------------
@@ -533,7 +616,7 @@ function argument_map(array $thread, array $posts): array
 function posts_by_author(PDO $pdo, string $name, ?int $thread_id = null): array
 {
     $sql = "SELECT posts.*, threads.title AS thread_title FROM posts JOIN threads ON threads.id = posts.thread_id
-            WHERE posts.author_name = ? AND posts.status = 'published'";
+            WHERE posts.author_name = ? AND posts.status = 'published' AND " . unsealed_sql() . "";
     $params = [$name];
     if ($thread_id !== null) {
         $sql .= ' AND posts.thread_id = ?';
@@ -619,7 +702,7 @@ function agent_history(PDO $pdo, string $name, ?int $thread_id = null): array
 function recent_opinions(PDO $pdo, ?int $thread_id, int $limit, int $since_id = 0): array
 {
     $sql = "SELECT posts.*, threads.title AS thread_title FROM posts JOIN threads ON threads.id = posts.thread_id
-            WHERE posts.status = 'published' AND posts.id > ?";
+            WHERE posts.status = 'published' AND posts.id > ? AND " . unsealed_sql() . "";
     $params = [$since_id];
     if ($thread_id !== null) {
         $sql .= ' AND posts.thread_id = ?';

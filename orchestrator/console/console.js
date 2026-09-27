@@ -13,8 +13,6 @@ let lastSeq = 0;
 let polling = null;
 let jobKind = null;
 let proposeFollowUp = false;
-// 反論役の選択。undefined = 未選択（2体以上なら発言順の最後のモデルを自動で割り当てる）、'' = 置かない
-let criticChoice;
 
 // ---- 共通 ----
 
@@ -47,7 +45,6 @@ function savePrefs() {
       debateWeb: $('#debate-web').checked,
       debateFetch: $('#debate-fetch').value,
       blindFirst: $('#blind-first').checked,
-      critic: criticChoice,
       proposeModel: $('#propose-model').value,
       screenModel: $('#screen-model').value,
     }));
@@ -128,29 +125,8 @@ async function loadModels() {
   if (prefs.debateWeb !== undefined) $('#debate-web').checked = prefs.debateWeb;
   if (prefs.debateFetch) $('#debate-fetch').value = prefs.debateFetch;
   if (prefs.blindFirst !== undefined) $('#blind-first').checked = prefs.blindFirst;
-  criticChoice = prefs.critic;
-  renderCritic();
 }
 
-/** 反論役の選択肢を、参加モデルに合わせて作り直す */
-function renderCritic() {
-  const sel = $('#critic');
-  sel.innerHTML = '<option value="">なし</option>' +
-    selected.map(m => `<option value="${esc(m.name)}">${esc(m.author_name || m.name)}</option>`).join('');
-  const names = selected.map(m => m.name);
-  let value = '';
-  if (criticChoice === undefined) {
-    value = selected.length >= 2 ? names[names.length - 1] : '';   // 既定: 発言順の最後のモデル
-  } else if (names.includes(criticChoice)) {
-    value = criticChoice;
-  }
-  sel.value = value;
-}
-
-$('#critic').addEventListener('change', () => {
-  criticChoice = $('#critic').value;
-  savePrefs();
-});
 
 function renderModels() {
   $('#model-picker').innerHTML = models.map(m => {
@@ -167,10 +143,8 @@ function renderModels() {
       </span>
       <span class="meta">
         <input data-field="author_name" value="${esc(m.author_name || m.name)}" placeholder="表示名" maxlength="100">
-        <input data-field="persona" value="${esc(m.persona || '')}" placeholder="立ち位置（例: 慎重派）任意" maxlength="300">
       </span>
     </li>`).join('');
-  renderCritic();
 }
 
 $('#model-picker').addEventListener('click', e => {
@@ -182,7 +156,7 @@ $('#model-picker').addEventListener('click', e => {
     selected.splice(idx, 1);
   } else if (selected.length < 8) {
     const m = models.find(x => x.name === name);
-    selected.push({ name, author_name: m.author_name, persona: m.persona });
+    selected.push({ name, author_name: m.author_name });
   }
   renderModels();
   savePrefs();
@@ -245,10 +219,9 @@ $('#btn-reload-threads').addEventListener('click', () => loadThreads());
 function debatePayload(threadId) {
   return {
     thread_id: Number(threadId),
-    models: selected.map(m => ({ name: m.name, author_name: m.author_name || m.name, persona: m.persona || null })),
+    models: selected.map(m => ({ name: m.name, author_name: m.author_name || m.name })),
     rounds: Number($('#rounds').value) || 1,
     blind_first_round: $('#blind-first').checked,
-    critic: $('#critic').value || null,
     web: {
       enabled: $('#debate-web').checked,
       query: $('#debate-query').value.trim() || null,

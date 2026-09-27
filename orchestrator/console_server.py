@@ -105,7 +105,6 @@ def models():
         {
             "name": n,
             "author_name": presets.get(n, {}).get("author_name") or n,
-            "persona": presets.get(n, {}).get("persona", ""),
             "preset": n in presets,
         }
         for n in names
@@ -251,7 +250,6 @@ class WebOptions(BaseModel):
 class ModelSel(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     author_name: str | None = Field(None, max_length=100)
-    persona: str | None = Field(None, max_length=300)
 
 
 class DebateIn(BaseModel):
@@ -260,7 +258,6 @@ class DebateIn(BaseModel):
     rounds: int = Field(1, ge=1, le=10)
     web: WebOptions = WebOptions()
     blind_first_round: bool = True           # 1周目は他の意見を見せない（同調の防止）
-    critic: str | None = Field(None, max_length=100)  # 反論役にするモデル名
 
 
 class ProposeIn(BaseModel):
@@ -290,7 +287,7 @@ def debate_start(body: DebateIn):
     models = [m.model_dump() for m in body.models]
     try:
         job = DebateJob(client, body.thread_id, models, rounds=body.rounds, web=body.web.model_dump(),
-                        blind_first_round=body.blind_first_round, critic=body.critic or None)
+                        blind_first_round=body.blind_first_round)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     return _start(job)

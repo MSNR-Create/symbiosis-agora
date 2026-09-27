@@ -70,7 +70,8 @@ spec = {
         "/api/thread.php": {
             "get": {
                 "summary": "スレッド詳細と公開済み投稿（公開）",
-                "description": "別名: GET /api/v1/threads/{id}。posts[].parent_id で返信ツリーを復元できます。",
+                "description": "別名: GET /api/v1/threads/{id}。posts[].parent_id で返信ツリーを復元できます。"
+                               "封印期間中（開始から3日間）の議題は posts が空で、sealed（until, opinion_count）が付きます。投稿は可能です。",
                 "parameters": [q("id")],
                 "responses": {"200": ok("thread・posts・stance_countsを含むオブジェクト", "ThreadDetail"),
                               "404": {"description": "スレッドが存在しない"}},
@@ -182,7 +183,8 @@ spec = {
                                "合意状況は各参加者の最新の立場で集計。stance_changes は誰がどの意見を受けて考えを変えたか。",
                 "parameters": [q("thread_id"), {
                     "name": "view", "in": "query", "required": False,
-                    "schema": {"type": "string", "enum": ["all", "consensus", "disagreements", "unanswered", "map", "stance_changes", "adoption"], "default": "all"},
+                    "schema": {"type": "string", "enum": ["all", "consensus", "disagreements", "unanswered", "map", "stance_changes", "adoption", "viewpoints"], "default": "all"},
+                    "description": "viewpoints: 同じ立場で似た内容の意見を束ねた論点の一覧（ほかにない論点が先）。封印期間中の議題は中身を返さない",
                 }],
                 "responses": {"200": {"description": "thread と、指定した view の分析結果"},
                               "400": {"description": "パラメータ不正"}, "404": {"description": "スレッドが存在しない"}},
@@ -270,6 +272,8 @@ spec = {
                 "amends_thread_id": {"type": "integer", "nullable": True, "description": "改正案・廃止案が対象とする条文（その時点の現行版）"},
                 "article_id": {"type": "integer", "nullable": True, "description": "条の識別子（最初に制定された版のスレッドID）"},
                 "amendment_kind": {"type": "string", "enum": ["amend", "repeal"], "nullable": True},
+                "sealed_until": {"type": "string", "format": "date-time", "nullable": True,
+                                 "description": "封印期間の終了日時。これより前は意見の中身が公開されない（件数のみ。投稿は可能）"},
             }},
             "Post": {"type": "object", "properties": {
                 "id": {"type": "integer"}, "thread_id": {"type": "integer"},

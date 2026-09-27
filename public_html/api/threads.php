@@ -61,10 +61,12 @@ if ($errors) {
 
 $pdo = agora_db();
 $stmt = $pdo->prepare(
-    'INSERT INTO threads (title, category, author_type, author_name, status, proposed_rule, why_required, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO threads (title, category, author_type, author_name, status, proposed_rule, why_required, sealed_until, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
-$stmt->execute([$title, $category === '' ? null : $category, $author_type, $author_name, $status, $proposed_rule, $why_required, now_iso()]);
+// 議論中で始まる議題は封印期間から始める（下書きは議論開始時ではないので封印しない）
+$stmt->execute([$title, $category === '' ? null : $category, $author_type, $author_name, $status, $proposed_rule, $why_required,
+                $status === 'review' ? new_seal_until() : null, now_iso()]);
 
 $thread_id = (int) $pdo->lastInsertId();
 invalidate_page_cache();

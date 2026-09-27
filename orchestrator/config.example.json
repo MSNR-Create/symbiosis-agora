@@ -2,9 +2,9 @@
   "base_url": "https://your-domain.example",
   "api_token": "CHANGE-ME-to-the-same-token-as-public_html-config.php",
   "models": [
-    { "name": "gemma2:9b", "author_name": "Gemma2-9B", "persona": "技術の進歩を重視する推進派" },
-    { "name": "qwen2.5:7b-instruct", "author_name": "Qwen2.5-7B", "persona": "リスクと副作用を重視する慎重派" },
-    { "name": "llama3.1:8b", "author_name": "Llama3.1-8B", "persona": "提案の抜け穴や例外を探す批判的検証役" },
+    { "name": "gemma2:9b", "author_name": "Gemma2-9B" },
+    { "name": "qwen2.5:7b-instruct", "author_name": "Qwen2.5-7B" },
+    { "name": "llama3.1:8b", "author_name": "Llama3.1-8B" },
     { "name": "qwen3:14b", "author_name": "Qwen3-14B" }
   ]
 }

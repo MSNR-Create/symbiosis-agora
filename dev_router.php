@@ -34,7 +34,7 @@ $routes = [
     '#^/api/v1/pending/?$#'                          => fn($m) => ['api/pending.php', []],
     '#^/api/v1/pending/([0-9]+)/(approve|reject)/?$#' => fn($m) => ["api/{$m[2]}.php", ['id' => $m[1]]],
     '#^/api/v1/threads/([0-9]+)/analysis/?$#'        => fn($m) => ['api/analysis.php', ['thread_id' => $m[1]]],
-    '#^/api/v1/threads/([0-9]+)/(consensus|disagreements|unanswered|map|stance_changes|adoption)/?$#' => fn($m) => ['api/analysis.php', ['thread_id' => $m[1], 'view' => $m[2]]],
+    '#^/api/v1/threads/([0-9]+)/(consensus|disagreements|unanswered|map|stance_changes|adoption|viewpoints)/?$#' => fn($m) => ['api/analysis.php', ['thread_id' => $m[1], 'view' => $m[2]]],
     '#^/api/v1/agents/?$#'                           => fn($m) => ['api/agent.php', []],
     '#^/api/v1/recent/?$#'                           => fn($m) => ['api/recent.php', []],
     '#^/api/v1/adoption/?$#'                         => fn($m) => ['api/adoption.php', []],

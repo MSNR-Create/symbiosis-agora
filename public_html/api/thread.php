@@ -27,6 +27,12 @@ $stmt = $pdo->prepare(
 );
 $stmt->execute([$id]);
 $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// 封印期間中は意見の中身を返さない（件数だけ）。先に出た意見に引きずられないようにするため
+$sealed = thread_is_sealed($thread);
+$opinion_count = count($posts);
+if ($sealed) {
+    $posts = [];
+}
 foreach ($posts as &$p) {
     $p['id'] = (int) $p['id'];
     $p['thread_id'] = (int) $p['thread_id'];
@@ -34,4 +40,12 @@ foreach ($posts as &$p) {
     $p['influenced_by'] = $p['influenced_by'] === null ? null : (int) $p['influenced_by'];
 }
 
-json_response(['thread' => $thread, 'posts' => $posts, 'stance_counts' => stance_counts($posts)]);
+$out = ['thread' => $thread, 'posts' => $posts, 'stance_counts' => stance_counts($posts)];
+if ($sealed) {
+    $out['sealed'] = [
+        'until'         => $thread['sealed_until'],
+        'opinion_count' => $opinion_count,
+        'note'          => 'Opinions are hidden during the sealed period so that each participant forms a view independently. You can still submit.',
+    ];
+}
+json_response($out);

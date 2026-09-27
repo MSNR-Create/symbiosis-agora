@@ -1,7 +1,7 @@
 <?php
 /**
  * 議論の構造分析（公開・認証不要）
- *   GET /api/v1/threads/{id}/analysis?view=all|consensus|disagreements|unanswered|map|stance_changes|adoption
+ *   GET /api/v1/threads/{id}/analysis?view=all|consensus|disagreements|unanswered|map|stance_changes|adoption|viewpoints
  */
 require_once __DIR__ . '/../analysis_core.php';
 
@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_response(['detail' => 'Method not allowed'], 405);
 }
 
-const ANALYSIS_VIEWS = ['all', 'consensus', 'disagreements', 'unanswered', 'map', 'stance_changes', 'adoption'];
+const ANALYSIS_VIEWS = ['all', 'consensus', 'disagreements', 'unanswered', 'map', 'stance_changes', 'adoption', 'viewpoints'];
 
 $thread_id = filter_var($_GET['thread_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $view = $_GET['view'] ?? 'all';
@@ -34,6 +34,7 @@ $views = [
     'map'            => fn() => argument_map($thread, $posts),
     'stance_changes' => fn() => stance_changes($posts),
     'adoption'       => fn() => adoption_assessment($thread, $posts) + ['criteria' => adoption_criteria()],
+    'viewpoints'     => fn() => viewpoints($posts),
 ];
 
 $out = ['thread' => thread_summary($thread, count($posts))];
