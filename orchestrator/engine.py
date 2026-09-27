@@ -6,6 +6,7 @@
 """
 import itertools
 import json
+import re
 import threading
 import time
 from typing import Callable
@@ -254,6 +255,40 @@ def build_debate_user_prompt(thread: dict, posts: list, research_block: str = ""
     return "\n".join(lines)
 
 
+# 言い直しの間引き: 同じ参加者が同じ立場で、前と同じ意見を言い直しただけなら投稿しない。
+# 考え方は指示せず、場に重複を増やさないだけ。本番の投稿で較正した値
+# （言い直しは 0.56 以上、同じ人の新しい論点は 0.43 以下に分かれた）。
+RESTATEMENT_THRESHOLD = 0.5
+_PUNCT = re.compile(r"[\s、。，．,.!?！？「」『』（）()]+")
+
+
+def _bigrams(text: str) -> set[str]:
+    s = _PUNCT.sub("", text or "")
+    return {s[i:i + 2] for i in range(len(s) - 1)}
+
+
+def restatement_score(new: str, old: str) -> float:
+    """文字bigramの重なり（Jaccard）と、新しい文が古い文に含まれる割合の大きいほう。
+    短い言い直し（前の意見の一部だけを繰り返す）も拾うため、含有率も見る。"""
+    a, b = _bigrams(new), _bigrams(old)
+    if not a or not b:
+        return 0.0
+    common = len(a & b)
+    return max(common / len(a | b), common / len(a))
+
+
+def find_restatement(opinion: str, stance: str, author: str, posts: list) -> tuple[int, float] | None:
+    """同じ参加者・同じ立場の過去の意見のうち、言い直しとみなせるものがあれば (投稿ID, 類似度)"""
+    best = None
+    for p in posts:
+        if p.get("author_name") != author or p.get("stance") != stance:
+            continue
+        score = restatement_score(opinion, p.get("opinion", ""))
+        if score >= RESTATEMENT_THRESHOLD and (best is None or score > best[1]):
+            best = (p["id"], score)
+    return best
+
+
 def parse_reply_to(value, posts: list) -> int | None:
     try:
         post_id = int(str(value).lstrip("#"))
@@ -281,6 +316,7 @@ class DebateJob(Job):
         self.rounds = max(1, min(int(rounds), 10))
         self.web = web or {}
         self.blind_first_round = blind_first_round
+        self.restated = 0
 
     def run(self) -> None:
         data = self.client.get_thread(self.thread_id)
@@ -344,8 +380,9 @@ class DebateJob(Job):
             if next_model != model:
                 self.unload(model)
 
-        self.result = {"thread_id": self.thread_id, "posted": posted}
-        self.emit("info", f"{posted} 件の意見を投稿しました", thread_id=self.thread_id)
+        self.result = {"thread_id": self.thread_id, "posted": posted, "restated": self.restated}
+        unchanged = f"（言い直しで投稿しなかった発言 {self.restated} 件）" if self.restated else ""
+        self.emit("info", f"{posted} 件の意見を投稿しました{unchanged}", thread_id=self.thread_id)
 
     def _viewpoints(self) -> list | None:
         """公開の場と同じ「論点ごと」の見え方を取得する（取得できなければ時系列の一覧で代用）"""
@@ -378,6 +415,15 @@ class DebateJob(Job):
         previous = [p for p in posts if p.get("author_name") == author and p.get("stance")]
         if influenced_by is not None and (not previous or previous[-1]["stance"] == stance):
             influenced_by = None  # 立場が変わっていないのに影響元を付けても「考えの変化」にはならない
+        # 前と同じ立場で新しい代替案もなく、意見が言い直しなら投稿しない（立場の変化・新しい代替案は常に投稿する）
+        known_alternatives = {p.get("alternative_rule") for p in previous}
+        if alternative is None or alternative in known_alternatives:
+            same = find_restatement(opinion, stance, author, posts)
+            if same:
+                self.restated += 1
+                self.emit("unchanged", f"{author}: {stance} のまま — 前の意見 #{same[0]} の言い直し（類似度 {same[1]:.2f}）のため投稿しませんでした",
+                          author=author, stance=stance, same_as=same[0], score=round(same[1], 2))
+                return False
         sources = cited_sources(result.get("sources"), results)
         if sources:
             why_reason += "\n参考: " + " , ".join(sources)
@@ -397,7 +443,8 @@ class DebateJob(Job):
             self.emit("skip", f"{author}: 投稿に失敗 ({exc})")
             return False
         post_id = res["post_id"]
-        posts.append({"id": post_id, "parent_id": reply_to, "author_name": author, "stance": stance, "opinion": opinion})
+        posts.append({"id": post_id, "parent_id": reply_to, "author_name": author, "stance": stance, "opinion": opinion,
+                      "alternative_rule": alternative})
         changed = f"（#{influenced_by} を受けて {previous[-1]['stance']} → {stance} に変更）" if influenced_by else ""
         self.emit("posted", f"{author}: {stance}" + (f" → #{reply_to}" if reply_to else "") + changed + f" （#{post_id}）",
                   post_id=post_id, author=author, stance=stance, opinion=opinion, why_reason=why_reason,

@@ -91,11 +91,18 @@ button:disabled { opacity: 0.45; cursor: default; }
 /* ---- レイアウト ---- */
 .layout {
   display: grid;
-  grid-template-columns: minmax(340px, 440px) 1fr;
+  grid-template-columns: minmax(360px, 32%) 1fr;
   gap: 1rem;
   padding: 1rem;
-  max-width: 1400px;
-  margin: 0 auto;
+}
+/* 広い画面: ウィンドウ全体を使い、左右のパネルがそれぞれスクロールする */
+@media (min-width: 901px) {
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; }
+  .topbar { flex: none; }
+  .layout { flex: 1; min-height: 0; }
+  .layout > .panel { min-height: 0; overflow-y: auto; }
+  .layout > .panel.live { overflow: hidden; }
 }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
@@ -218,6 +225,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .log .ev-warn { color: var(--warn); }
 .log .ev-error { color: var(--disagree); font-weight: 600; }
 .log .ev-skip { color: var(--warn); }
+.log .ev-unchanged { color: var(--muted); }
 .log .ev-unload, .log .ev-search { color: var(--muted); }
 .log .ev-turn { font-weight: 600; }
 .log .ev-done { font-weight: 700; border-top: 1px solid var(--border); padding-top: 0.6rem; }
