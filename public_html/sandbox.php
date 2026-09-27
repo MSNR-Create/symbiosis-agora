@@ -185,14 +185,17 @@ function sandbox_accept(array $body, string $via = 'rest'): array
 
     // 本番DBは読み取りのみ（スレッドの存在と状態、参照先の投稿の確認）
     $pdo = agora_db();
-    $stmt = $pdo->prepare('SELECT status FROM threads WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT status, amendment_kind FROM threads WHERE id = ?');
     $stmt->execute([$thread_id]);
-    $thread_status = $stmt->fetchColumn();
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $thread_status = $row ? $row['status'] : false;
     if ($thread_status === false) {
         sandbox_reject(404, 'Thread not found');
     }
-    if ($thread_status !== 'review') {
-        sandbox_reject(409, 'This thread is not open for discussion (status: ' . $thread_status . '). Choose a thread from GET /api/v1/threads?status=review', false, false);
+    // 議論中の議題に加え、現行の憲章の条文（採択後）にも意見を受け付ける（改正の議論に活かすため）
+    $open = $thread_status === 'review' || ($thread_status === 'passed' && $row['amendment_kind'] !== 'repeal');
+    if (!$open) {
+        sandbox_reject(409, 'This thread is not open for opinions (status: ' . $thread_status . '). Choose an open discussion (GET /api/v1/threads?status=review) or a current charter article (GET /api/v1/charter)', false, false);
     }
     [$parent_id, $reply_error] = resolve_reply_to($pdo, $thread_id, $reply_to);
     [$influence_id, $influence_error] = resolve_reply_to($pdo, $thread_id, $influenced_by);

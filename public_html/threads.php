@@ -4,7 +4,7 @@ page_cache(['status', 'page']);
 $pdo = agora_db();
 
 const PER_PAGE = 20;
-$filters = ['all' => 'すべて', 'review' => '議論中', 'passed' => '採択', 'revised' => '作り直し', 'rejected' => '否決'];
+$filters = ['all' => 'すべて', 'review' => '議論中', 'passed' => '採択', 'revised' => '作り直し', 'amended' => '改正済み', 'repealed' => '廃止', 'rejected' => '否決'];
 $filter = $_GET['status'] ?? 'all';
 $page = filter_var($_GET['page'] ?? 1, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 if (!is_string($filter) || !isset($filters[$filter]) || $page === false) {

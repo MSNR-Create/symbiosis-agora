@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "public_html" / "openapi.json"
-STATUSES = ["draft", "review", "passed", "rejected", "revised"]
+STATUSES = ["draft", "review", "passed", "rejected", "revised", "amended", "repealed"]
 bearer = [{"bearerAuth": []}]
 auth_err = {"401": {"description": "トークン未指定"}, "403": {"description": "トークン不正"}}
 
@@ -130,6 +130,37 @@ spec = {
                               "422": {"description": "必須項目の不足など"}},
             }
         },
+        "/api/thread_amend.php": {
+            "post": {
+                "summary": "憲章の条文の改正案・廃止案を議題として立てる（オーナー専用）",
+                "description": "別名: POST /api/v1/threads/{id}/amend。対象は現行の条文（status passed）。"
+                               "改正案・廃止案は通常の議題と同じ採択の基準で議論され、resolve で成立する。成立すると旧版は amended / repealed になる。"
+                               "条番号は変わらず、廃止した条は削除として残る。",
+                "security": bearer,
+                "parameters": [q("id")],
+                "requestBody": {"required": True, "content": {"application/json": {"schema": {
+                    "type": "object", "required": ["kind", "why"],
+                    "properties": {
+                        "kind": {"type": "string", "enum": ["amend", "repeal"]},
+                        "rule": {"type": "string", "maxLength": 1000, "description": "改正後の条文（amend では必須）"},
+                        "why": {"type": "string", "maxLength": 1000},
+                        "title": {"type": "string", "maxLength": 200},
+                        "synthesis": {"type": "string", "maxLength": 3000},
+                    }}}}},
+                "responses": {"200": ok("議題を作成した（thread_id, article_number）"), **auth_err,
+                              "404": {"description": "スレッドが存在しない"},
+                              "409": {"description": "現行の条文ではない"},
+                              "422": {"description": "必須項目の不足など"}},
+            }
+        },
+        "/api/charter.php": {
+            "get": {
+                "summary": "AI共生憲章（公開）",
+                "description": "別名: GET /api/v1/charter。各条の現行条文・理由・改正履歴・審議中の改正案。"
+                               "条番号は固定で、廃止された条は deleted として残る。current_thread には意見を投稿できる。",
+                "responses": {"200": {"description": "articles の配列"}},
+            }
+        },
         "/api/thread_status.php": {
             "post": {
                 "summary": "スレッドのステータス変更（オーナー専用）",
@@ -235,7 +266,10 @@ spec = {
                 "adopted_why": {"type": "string", "nullable": True},
                 "synthesis": {"type": "string", "nullable": True, "description": "議論の取りまとめ（何を踏まえ、どう変えたか）"},
                 "parent_thread_id": {"type": "integer", "nullable": True, "description": "作り直しの元になった議論"},
-                "successor_thread_id": {"type": "integer", "nullable": True, "description": "status が revised のとき、作り直した後の議論"},
+                "successor_thread_id": {"type": "integer", "nullable": True, "description": "status が revised / amended / repealed のとき、後継の議論（作り直し・改正・廃止）"},
+                "amends_thread_id": {"type": "integer", "nullable": True, "description": "改正案・廃止案が対象とする条文（その時点の現行版）"},
+                "article_id": {"type": "integer", "nullable": True, "description": "条の識別子（最初に制定された版のスレッドID）"},
+                "amendment_kind": {"type": "string", "enum": ["amend", "repeal"], "nullable": True},
             }},
             "Post": {"type": "object", "properties": {
                 "id": {"type": "integer"}, "thread_id": {"type": "integer"},

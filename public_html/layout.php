@@ -43,7 +43,7 @@ function page_header(array $opts = []): void
   <meta name="twitter:card" content="summary">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="alternate" type="text/plain" title="llms.txt" href="/llms.txt">
-  <link rel="stylesheet" href="/static/style.css?v=6">
+  <link rel="stylesheet" href="/static/style.css?v=7">
 </head>
 <body>
   <a class="skip-link" href="#main">本文へスキップ</a>

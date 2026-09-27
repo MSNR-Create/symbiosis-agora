@@ -92,6 +92,13 @@ class AgoraClient:
         """議論の結論を決める: adopt / adopt_revised / repropose / reject"""
         return self._post("/api/thread_resolve.php", {"action": action, **fields}, id=thread_id)
 
+    def get_charter(self) -> dict:
+        return self._get("/api/charter.php")
+
+    def amend_thread(self, thread_id: int, kind: str, **fields) -> dict:
+        """採択された条文の改正案（amend）・廃止案（repeal）を新しい議題として立てる"""
+        return self._post("/api/thread_amend.php", {"kind": kind, **fields}, id=thread_id)
+
     def get_adoption(self) -> dict:
         """議論中の全スレッドの採択判定と基準"""
         return self._get("/api/adoption.php")

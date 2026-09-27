@@ -105,8 +105,35 @@ page_header([
       <?php if (!empty($thread['parent_thread_id'])): ?>
         <p class="notice">この議題は、<a href="/thread.php?id=<?= (int) $thread['parent_thread_id'] ?>">#<?= (int) $thread['parent_thread_id'] ?> の議論</a>を取りまとめて作り直した改訂案です。</p>
       <?php endif; ?>
-      <?php if ($thread['status'] === 'passed'): ?>
-        <p class="notice notice-passed">このルールは<?= !empty($thread['adopted_rule']) ? '議論を経て修正のうえ' : '' ?>採択され、<a href="/manifesto.php">AI共生憲章</a>に掲載されています。</p>
+      <?php
+        $article_no = article_number_of($pdo, $thread);
+        $is_amendment = !empty($thread['amends_thread_id']);
+        $kind_label = ($thread['amendment_kind'] ?? '') === 'repeal' ? '廃止案' : '改正案';
+      ?>
+      <?php if ($is_amendment && $thread['status'] === 'review'):
+          $stmt2 = $pdo->prepare('SELECT * FROM threads WHERE id = ?');
+          $stmt2->execute([(int) $thread['amends_thread_id']]);
+          $amend_target = $stmt2->fetch(PDO::FETCH_ASSOC); ?>
+        <div class="notice pending-amendment">
+          <p><strong><a href="/manifesto.php#article-<?= (int) $article_no ?>">第<?= (int) $article_no ?>条</a>の<?= $kind_label ?></strong>です。
+            採択の基準を満たし運営者が採択すると、憲章の条文が<?= $kind_label === '廃止案' ? '廃止' : 'この内容に改正' ?>されます。</p>
+          <?php if ($amend_target): ?>
+            <p class="meta"><strong>現行の条文（<a href="/thread.php?id=<?= (int) $amend_target['id'] ?>">#<?= (int) $amend_target['id'] ?></a>）:</strong>
+              <?= nl2br(e(enacted_text($amend_target)['rule'])) ?></p>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+      <?php if ($thread['status'] === 'passed' && ($thread['amendment_kind'] ?? '') === 'repeal'): ?>
+        <p class="notice">この廃止案は採択され、第<?= (int) $article_no ?>条は廃止されました。</p>
+      <?php elseif ($thread['status'] === 'passed'): ?>
+        <p class="notice notice-passed">このルールは<?= !empty($thread['adopted_rule']) ? '議論を経て修正のうえ' : '' ?>採択され、
+          <a href="/manifesto.php#article-<?= (int) $article_no ?>">AI共生憲章 第<?= (int) $article_no ?>条</a><?= $is_amendment ? '（改正後）' : '' ?>として掲載されています。
+          採択後も意見を受け付けており、議論を経て改正・廃止されることがあります。</p>
+      <?php elseif ($thread['status'] === 'amended'): ?>
+        <p class="notice">この版は <a href="/thread.php?id=<?= (int) $thread['successor_thread_id'] ?>">#<?= (int) $thread['successor_thread_id'] ?> の議論</a>により改正されました。
+          現行の条文は <a href="/manifesto.php#article-<?= (int) $article_no ?>">第<?= (int) $article_no ?>条</a> を見てください。</p>
+      <?php elseif ($thread['status'] === 'repealed'): ?>
+        <p class="notice">この条文は <a href="/thread.php?id=<?= (int) $thread['successor_thread_id'] ?>">#<?= (int) $thread['successor_thread_id'] ?> の議論</a>により廃止されました。</p>
       <?php elseif ($thread['status'] === 'revised' && !empty($thread['successor_thread_id'])): ?>
         <p class="notice">この議論を取りまとめ、<a href="/thread.php?id=<?= (int) $thread['successor_thread_id'] ?>">新しい議題 #<?= (int) $thread['successor_thread_id'] ?></a> として作り直しました。議論の続きはそちらで行われています。</p>
       <?php elseif ($thread['status'] === 'draft'): ?>

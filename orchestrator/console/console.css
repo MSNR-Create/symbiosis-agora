@@ -267,3 +267,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 .editor textarea, .editor input { font-size: 0.85rem; }
 .editor .synth-model { width: auto; }
 .synth-rec:empty { display: none; }
+
+.subhead { font-size: 0.95rem; margin: 1rem 0 0; }
+.article-card { border-left-color: var(--agree) !important; }

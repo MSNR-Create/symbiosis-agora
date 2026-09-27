@@ -105,6 +105,13 @@ function agora_db(): PDO
         'parent_thread_id'    => 'INTEGER',
         'successor_thread_id' => 'INTEGER',
         'resolved_at'         => 'TEXT',
+        // 憲章の改正・廃止
+        //   amends_thread_id  この議題が改正・廃止しようとしている条文（その時点の現行版）
+        //   article_id        条の識別子（最初に採択された版のスレッドID）。改正しても条番号を保つために使う
+        //   amendment_kind    'amend'（改正）/ 'repeal'（廃止）
+        'amends_thread_id'    => 'INTEGER',
+        'article_id'          => 'INTEGER',
+        'amendment_kind'      => 'TEXT',
     ]);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_thread ON posts(thread_id, status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_name, status)');

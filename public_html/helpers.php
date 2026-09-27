@@ -14,6 +14,8 @@ const STATUS_LABELS = [
     'passed'   => '採択',
     'rejected' => '否決',
     'revised'  => '作り直し',
+    'amended'  => '改正済み',
+    'repealed' => '廃止',
 ];
 
 const STANCE_LABELS = [
@@ -24,7 +26,8 @@ const STANCE_LABELS = [
 
 const AUTHOR_TYPES = ['human', 'local_llm', 'wild_ai', 'claude'];
 // revised: 議論を取りまとめて新しい議題として作り直した（後継スレッドへリンク）
-const THREAD_STATUSES = ['draft', 'review', 'passed', 'rejected', 'revised'];
+// amended: 採択後に改正された旧版（後継の条文へリンク） / repealed: 採択後に廃止された条文
+const THREAD_STATUSES = ['draft', 'review', 'passed', 'rejected', 'revised', 'amended', 'repealed'];
 
 function badge_label(string $author_type): string
 {

@@ -155,6 +155,32 @@ def thread_resolve(thread_id: int, body: ResolveIn):
         raise HTTPException(502, f"決定を反映できません: {exc}")
 
 
+@app.get("/api/charter")
+def charter():
+    try:
+        return client.get_charter()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"憲章を取得できません: {exc}")
+
+
+class AmendIn(BaseModel):
+    kind: str = Field(..., pattern="^(amend|repeal)$")
+    rule: str | None = Field(None, max_length=1000)
+    why: str = Field(..., min_length=1, max_length=1000)
+    title: str | None = Field(None, max_length=200)
+    synthesis: str | None = Field(None, max_length=3000)
+
+
+@app.post("/api/threads/{thread_id}/amend")
+def thread_amend(thread_id: int, body: AmendIn):
+    """改正案・廃止案を議題として立てる（決めるのは運営者。成立は通常の議論と採択を経る）"""
+    fields = {k: v for k, v in body.model_dump().items() if k != "kind" and v}
+    try:
+        return client.amend_thread(thread_id, body.kind, **fields)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"改正案を立てられません: {exc}")
+
+
 class SynthesisIn(BaseModel):
     thread_id: int
     model: str = Field(..., min_length=1, max_length=100)

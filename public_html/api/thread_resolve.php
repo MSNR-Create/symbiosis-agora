@@ -69,6 +69,23 @@ if ($thread['status'] !== 'review') {
     json_response(['detail' => 'Only threads under discussion (review) can be resolved. Current status: ' . $thread['status']], 409);
 }
 
+// 改正案・廃止案の場合: 対象の条文が今も現行であることを確認する（別の改正が先に成立していたら、古い条文への改正は成立させない）
+$target = null;
+$kind = $thread['amendment_kind'] ?? null;
+if (!empty($thread['amends_thread_id']) && in_array($action, ['adopt', 'adopt_revised'], true)) {
+    $stmt = $pdo->prepare('SELECT * FROM threads WHERE id = ?');
+    $stmt->execute([(int) $thread['amends_thread_id']]);
+    $target = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$target || $target['status'] !== 'passed') {
+        json_response(['detail' => 'The article this proposal amends is no longer current'
+            . ($target && $target['successor_thread_id'] ? ' (changed by #' . (int) $target['successor_thread_id'] . ')' : '')
+            . '. Re-propose it against the current article.'], 409);
+    }
+    if ($kind === 'repeal' && $action === 'adopt_revised') {
+        json_response(['detail' => ['A repeal proposal can only be adopted as proposed, re-proposed, or rejected']], 422);
+    }
+}
+
 $now = now_iso();
 $pdo->beginTransaction();
 try {
@@ -87,14 +104,22 @@ try {
                 ->execute([$rule, $why, $synthesis, $now, $id]);
             break;
         case 'repropose':
+            // 改正案・廃止案を作り直す場合は、同じ条への改正案として引き継ぐ
             $pdo->prepare(
-                "INSERT INTO threads (title, category, author_type, author_name, status, proposed_rule, why_required, parent_thread_id, synthesis, created_at)
-                 VALUES (?, ?, ?, ?, 'review', ?, ?, ?, ?, ?)"
-            )->execute([$title, $category !== '' ? $category : $thread['category'], $author_type, $author_name, $rule, $why, $id, $synthesis, $now]);
+                "INSERT INTO threads (title, category, author_type, author_name, status, proposed_rule, why_required, parent_thread_id, synthesis,
+                                      amends_thread_id, article_id, amendment_kind, created_at)
+                 VALUES (?, ?, ?, ?, 'review', ?, ?, ?, ?, ?, ?, ?, ?)"
+            )->execute([$title, $category !== '' ? $category : $thread['category'], $author_type, $author_name, $rule, $why, $id, $synthesis,
+                        $thread['amends_thread_id'] ?? null, $thread['article_id'] ?? null, $kind, $now]);
             $new_thread_id = (int) $pdo->lastInsertId();
             $pdo->prepare("UPDATE threads SET status = 'revised', successor_thread_id = ?, synthesis = ?, resolved_at = ? WHERE id = ?")
                 ->execute([$new_thread_id, $synthesis, $now, $id]);
             break;
+    }
+    // 改正・廃止が成立したら、それまでの版を「改正済み」「廃止」にして、新しい版へリンクする
+    if ($target !== null) {
+        $pdo->prepare('UPDATE threads SET status = ?, successor_thread_id = ?, resolved_at = ? WHERE id = ?')
+            ->execute([$kind === 'repeal' ? 'repealed' : 'amended', $id, $now, (int) $target['id']]);
     }
     $pdo->commit();
 } catch (Throwable $e) {

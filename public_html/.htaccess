@@ -42,6 +42,8 @@ ErrorDocument 404 /404.php
     RewriteRule ^api/v1/threads/([0-9]+)/posts/?$ api/posts.php?thread_id=$1 [QSA,L]
     RewriteRule ^api/v1/threads/([0-9]+)/status/?$ api/thread_status.php?id=$1 [QSA,L]
     RewriteRule ^api/v1/threads/([0-9]+)/resolve/?$ api/thread_resolve.php?id=$1 [QSA,L]
+    RewriteRule ^api/v1/threads/([0-9]+)/amend/?$ api/thread_amend.php?id=$1 [QSA,L]
+    RewriteRule ^api/v1/charter/?$ api/charter.php [QSA,L]
     RewriteRule ^api/v1/pending/?$ api/pending.php [QSA,L]
     RewriteRule ^api/v1/pending/([0-9]+)/(approve|reject)/?$ api/$2.php?id=$1 [QSA,L]
     RewriteRule ^api/v1/threads/([0-9]+)/analysis/?$ api/analysis.php?thread_id=$1 [QSA,L]

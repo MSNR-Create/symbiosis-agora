@@ -380,6 +380,8 @@ async function loadAdoption() {
       <li class="post adopt-card verdict-${esc(t.verdict)}">
         <div class="head">#${Number(t.thread.id)} ${esc(t.thread.title)}
           <span class="verdict-badge">${esc(t.label)}</span></div>
+        ${t.thread.amendment_kind ? `<p class="hint"><span class="flag">${t.thread.amendment_kind === 'repeal' ? '廃止案' : '改正案'}</span>
+          採択すると、憲章の条文（#${Number(t.thread.amends_thread_id)}）が${t.thread.amendment_kind === 'repeal' ? '廃止' : 'この内容に改正'}されます</p>` : ''}
         <p class="body">${esc(t.thread.proposed_rule)}</p>
         <ul class="checks">${checks}</ul>
         <p class="hint">立場（全体）賛成${s.all.agree}・反対${s.all.disagree}・中立${s.all.neutral}
@@ -403,13 +405,104 @@ async function loadAdoption() {
           <label class="field"><span>その理由（Why）</span><textarea data-f="why" rows="3" maxlength="1000">${esc(t.thread.why_required || '')}</textarea></label>
           <label class="field"><span>作り直す場合の議題タイトル</span><input data-f="title" maxlength="200" value="${esc(t.thread.title)}（改訂案）"></label>
           <div class="row">
-            <button type="button" class="btn-primary small" data-resolve="adopt_revised" data-id="${Number(t.thread.id)}">修正して採択</button>
+            ${t.thread.amendment_kind === 'repeal' ? '' : `<button type="button" class="btn-primary small" data-resolve="adopt_revised" data-id="${Number(t.thread.id)}">修正して採択</button>`}
             <button type="button" class="small" data-resolve="repropose" data-id="${Number(t.thread.id)}">作り直して再提案</button>
           </div>
         </div>
       </li>`;
   }).join('') || '<li class="hint">議論中のスレッドはありません。</li>';
+  loadCharter();
 }
+
+// ---- 現行の条文（改正・廃止） ----
+
+async function loadCharter() {
+  const list = $('#charter-list');
+  let data;
+  try {
+    data = await api('/api/charter');
+  } catch (e) {
+    list.innerHTML = `<li class="hint">${esc(e.message)}</li>`;
+    return;
+  }
+  const current = data.articles.filter(a => !a.deleted);
+  list.innerHTML = current.map(a => {
+    const tid = Number(a.current_thread);
+    const pending = (a.pending_amendments || []).map(p =>
+      `<li>${p.kind === 'repeal' ? '廃止案' : '改正案'}を審議中: #${Number(p.thread_id)} ${esc(p.title)}</li>`).join('');
+    const versions = (a.versions || []).length;
+    return `
+      <li class="post article-card">
+        <div class="head">第${Number(a.number)}条 ${esc(a.title)}
+          ${versions > 1 ? `<span class="verdict-badge">改正 ${versions - 1} 回</span>` : ''}</div>
+        <p class="body">${esc(a.rule)}</p>
+        ${pending ? `<ul class="sub">${pending}</ul>` : ''}
+        <div class="row">
+          <button type="button" class="small" data-open-amend="amend" data-id="${tid}">改正案を出す</button>
+          <button type="button" class="small" data-open-amend="repeal" data-id="${tid}">廃止案を出す</button>
+          <a class="small" href="${esc(threadUrl(tid))}" target="_blank" rel="noopener">条文の議論と意見 ↗</a>
+        </div>
+        <div class="editor" data-amend-editor="${tid}" data-kind="amend" hidden>
+          <p class="hint amend-kind"></p>
+          <div class="row">
+            <select class="model-select synth-model">${$('#screen-model').innerHTML}</select>
+            <button type="button" class="small" data-synthesize data-id="${tid}">採択後の意見からLLMで下書きを作る</button>
+          </div>
+          <p class="hint synth-rec"></p>
+          <label class="field amend-rule"><span>改正後の条文</span><textarea data-f="rule" rows="3" maxlength="1000">${esc(a.rule)}</textarea></label>
+          <label class="field"><span>理由（なぜ改める・廃止するのか）</span><textarea data-f="why" rows="3" maxlength="1000"></textarea></label>
+          <label class="field"><span>取りまとめ（任意：どの意見を踏まえたか）</span><textarea data-f="synthesis" rows="3" maxlength="3000"></textarea></label>
+          <label class="field"><span>議題のタイトル（任意。空なら「第${Number(a.number)}条の改正案：…」）</span><input data-f="title" maxlength="200"></label>
+          <button type="button" class="btn-primary small" data-submit-amend data-id="${tid}">議題として立てる</button>
+        </div>
+      </li>`;
+  }).join('') || '<li class="hint">まだ採択された条文はありません。</li>';
+}
+
+function amendEditorOf(id) {
+  return document.querySelector(`[data-amend-editor="${Number(id)}"]`);
+}
+
+$('#charter-list').addEventListener('click', async e => {
+  const open = e.target.closest('button[data-open-amend]');
+  if (open) {
+    const ed = amendEditorOf(open.dataset.id);
+    const kind = open.dataset.openAmend;
+    ed.hidden = !(ed.hidden || ed.dataset.kind !== kind);
+    ed.dataset.kind = kind;
+    ed.querySelector('.amend-rule').hidden = kind === 'repeal';
+    ed.querySelector('.amend-kind').textContent = kind === 'repeal'
+      ? '廃止案：この条文をなくす議題を立てます。'
+      : '改正案：条文を改める議題を立てます。現行の条文を編集してください。';
+    return;
+  }
+  const synth = e.target.closest('button[data-synthesize]');
+  if (synth) {
+    const ed = amendEditorOf(synth.dataset.id);
+    await startJob('/api/synthesis/start', { thread_id: Number(synth.dataset.id), model: ed.querySelector('.synth-model').value }, 'synthesis');
+    return;
+  }
+  const submit = e.target.closest('button[data-submit-amend]');
+  if (!submit) return;
+  const id = Number(submit.dataset.id);
+  const ed = amendEditorOf(id);
+  const kind = ed.dataset.kind;
+  const f = name => ed.querySelector(`[data-f="${name}"]`).value.trim();
+  const body = { kind, why: f('why'), synthesis: f('synthesis') || null, title: f('title') || null };
+  if (kind === 'amend') body.rule = f('rule');
+  if (!body.why || (kind === 'amend' && !body.rule)) return alert(kind === 'amend' ? '改正後の条文と理由を入力してください' : '廃止する理由を入力してください');
+  const label = kind === 'repeal' ? '廃止案' : '改正案';
+  if (!confirm(`${label}を新しい議題として立てますか？\n（議論と採択の基準を経て、あなたが採択したときに成立します）`)) return;
+  submit.disabled = true;
+  try {
+    const res = await api(`/api/threads/${id}/amend`, { method: 'POST', body });
+    addLocalLog(`第${Number(res.article_number)}条の${label}を議題 #${Number(res.thread_id)} として立てました`);
+  } catch (err) {
+    alert(err.message);
+  }
+  loadAdoption();
+  loadThreads();
+});
 
 const RESOLVE_LABEL = {
   adopt: '原案のまま採択', adopt_revised: '修正して採択', repropose: '作り直して再提案', reject: '否決',
@@ -477,12 +570,14 @@ $('#adopt-list').addEventListener('click', async e => {
 
 /** 取りまとめジョブが終わったら、結果を該当スレッドのエディタに入れる（下書き。決定は人が行う） */
 function applySynthesis(result) {
-  const ed = result && editorOf(result.thread_id);
+  // 議論中の議題の取りまとめ、または現行の条文の改正案の下書きに入れる
+  const ed = result && (editorOf(result.thread_id) || amendEditorOf(result.thread_id));
   if (!ed) return;
   ed.hidden = false;
   for (const k of ['synthesis', 'rule', 'why', 'title']) {
     const v = k === 'synthesis' ? result.summary : result[k];
-    if (v) ed.querySelector(`[data-f="${k}"]`).value = v;
+    const field = ed.querySelector(`[data-f="${k}"]`);
+    if (v && field && !(k === 'title' && ed.dataset.amendEditor)) field.value = v;
   }
   ed.querySelector('.synth-rec').textContent = `取りまとめ役の勧め: ${RESOLVE_LABEL[result.recommendation]}` +
     (result.recommendation_reason ? `（${result.recommendation_reason}）` : '') + '。内容を確認・編集してから決定してください。';

@@ -72,6 +72,8 @@ function thread_summary(array $t, ?int $post_count = null): array
         'synthesis'     => $t['synthesis'] ?? null,
         'revision_of'   => isset($t['parent_thread_id']) ? (int) $t['parent_thread_id'] : null,
         'revised_as'    => isset($t['successor_thread_id']) ? (int) $t['successor_thread_id'] : null,
+        'amends_thread_id' => isset($t['amends_thread_id']) ? (int) $t['amends_thread_id'] : null,
+        'amendment_kind'   => $t['amendment_kind'] ?? null,
         'opinion_count' => $post_count,
         'created_at'    => $t['created_at'],
         'url'           => site_url('/thread.php?id=' . (int) $t['id']),
@@ -353,6 +355,125 @@ function adoption_criteria(): array
         'no_unanswered_dissent'=> true,
         'final_decision'       => 'operator',
     ];
+}
+
+// ---------------------------------------------------------------------------
+// 憲章（改正・廃止を含む）
+// ---------------------------------------------------------------------------
+
+/** 採択された版の条文と理由（修正して採択した場合は修正後） */
+function enacted_text(array $t): array
+{
+    return !empty($t['adopted_rule'])
+        ? ['rule' => $t['adopted_rule'], 'why' => $t['adopted_why']]
+        : ['rule' => $t['proposed_rule'], 'why' => $t['why_required']];
+}
+
+/** 条の識別子（最初に採択された版のスレッドID） */
+function article_root_id(array $t): int
+{
+    return (int) ($t['article_id'] ?: $t['id']);
+}
+
+/**
+ * 憲章を条ごとに組み立てる。
+ *   - 条番号は、最初に採択された版の順で固定（改正しても番号は変わらない）
+ *   - 廃止された条は「削除」として番号を残す（法令と同じ扱い）
+ *   - 各条に、改正の履歴と、審議中の改正案・廃止案を付ける
+ */
+function charter_articles(PDO $pdo): array
+{
+    $rows = $pdo->query(
+        "SELECT * FROM threads
+         WHERE status IN ('passed', 'amended', 'repealed') OR (status = 'review' AND article_id IS NOT NULL)
+         ORDER BY id ASC"
+    )->fetchAll(PDO::FETCH_ASSOC);
+
+    $groups = [];
+    foreach ($rows as $t) {
+        $groups[article_root_id($t)][] = $t;
+    }
+    ksort($groups);
+
+    $articles = [];
+    $no = 0;
+    foreach ($groups as $root => $group) {
+        $enacted = array_values(array_filter($group, fn($t) =>
+            in_array($t['status'], ['passed', 'amended', 'repealed'], true) && ($t['amendment_kind'] ?? null) !== 'repeal'));
+        if ($enacted === []) {
+            continue;   // 採択された版がない（ありえないが念のため）
+        }
+        $current = null;
+        foreach ($enacted as $t) {
+            if ($t['status'] === 'passed') {
+                $current = $t;
+            }
+        }
+        $repeal = null;
+        foreach ($group as $t) {
+            if (($t['amendment_kind'] ?? null) === 'repeal' && $t['status'] === 'passed') {
+                $repeal = $t;
+            }
+        }
+        $no++;
+        $articles[] = [
+            'number'      => $no,
+            'article_id'  => $root,
+            'title'       => $enacted[0]['title'],   // 条の名前は最初に制定したときのもの（改正案のタイトルには変えない）
+            'current'     => $current,
+            'deleted'     => $current === null,
+            'repealed_by' => $repeal ? (int) $repeal['id'] : null,
+            'versions'    => array_map(fn($t) => enacted_text($t) + [
+                'thread_id'  => (int) $t['id'],
+                'title'      => $t['title'],
+                'kind'       => (int) $t['id'] === $root ? 'original' : 'amendment',
+                'status'     => $t['status'],
+                'adopted_at' => $t['resolved_at'] ?: $t['created_at'],
+            ], $enacted),
+            'pending'     => array_values(array_map(fn($t) => [
+                'thread_id' => (int) $t['id'],
+                'title'     => $t['title'],
+                'kind'      => $t['amendment_kind'] ?: 'amend',
+            ], array_filter($group, fn($t) => $t['status'] === 'review'))),
+        ];
+    }
+    return $articles;
+}
+
+/** スレッドが属する条の番号（憲章に関係しないスレッドは null） */
+function article_number_of(PDO $pdo, array $thread): ?int
+{
+    if (($thread['article_id'] ?? null) === null && !in_array($thread['status'], ['passed', 'amended', 'repealed'], true)) {
+        return null;
+    }
+    $root = article_root_id($thread);
+    foreach (charter_articles($pdo) as $a) {
+        if ($a['article_id'] === $root) {
+            return $a['number'];
+        }
+    }
+    return null;
+}
+
+/** 憲章のJSON表現（API・MCP用） */
+function charter_summary(PDO $pdo): array
+{
+    return array_map(function ($a) {
+        $cur = $a['current'];
+        return array_filter([
+            'number'         => $a['number'],
+            'article_id'     => $a['article_id'],
+            'title'          => $a['title'],
+            'deleted'        => $a['deleted'],
+            'current_thread' => $cur ? (int) $cur['id'] : null,
+            'rule'           => $cur ? enacted_text($cur)['rule'] : null,
+            'why'            => $cur ? enacted_text($cur)['why'] : null,
+            'repealed_by'    => $a['repealed_by'],
+            'versions'       => array_map(fn($v) => array_diff_key($v, ['why' => 1]), $a['versions']),
+            'pending_amendments' => $a['pending'],
+            'url'            => $cur ? site_url('/thread.php?id=' . (int) $cur['id']) : null,
+        ], fn($v) => $v !== null);
+    }, charter_articles($pdo));
 }
 
 // ---------------------------------------------------------------------------

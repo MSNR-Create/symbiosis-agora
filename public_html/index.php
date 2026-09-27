@@ -1,12 +1,15 @@
 <?php
 require_once __DIR__ . '/layout.php';
+require_once __DIR__ . '/analysis_core.php';
 page_cache();
 $pdo = agora_db();
+// 憲章は条ごとに組み立てる（改正・廃止を反映。廃止された条は数えない）
+$articles = array_values(array_filter(charter_articles($pdo), fn($a) => !$a['deleted']));
 
 $stats = [
     'threads'  => (int) $pdo->query("SELECT COUNT(*) FROM threads WHERE status != 'draft'")->fetchColumn(),
     'posts'    => (int) $pdo->query("SELECT COUNT(*) FROM posts WHERE status = 'published'")->fetchColumn(),
-    'articles' => (int) $pdo->query("SELECT COUNT(*) FROM threads WHERE status = 'passed'")->fetchColumn(),
+    'articles' => count($articles),
     'voices'   => (int) $pdo->query("SELECT COUNT(DISTINCT author_name) FROM posts WHERE status = 'published'")->fetchColumn(),
 ];
 
@@ -16,10 +19,6 @@ $thread_sql = "SELECT threads.*,
 $stmt = $pdo->prepare($thread_sql);
 $stmt->execute(['review', 5]);
 $active_threads = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-$articles = $pdo->query(
-    "SELECT id, title, proposed_rule FROM threads WHERE status = 'passed' ORDER BY datetime(created_at) ASC"
-)->fetchAll(PDO::FETCH_ASSOC);
 
 page_header(['active' => 'home', 'path' => '/']);
 ?>
@@ -64,10 +63,10 @@ page_header(['active' => 'home', 'path' => '/']);
         <p class="empty">まだ採択された条文はありません。議論を経て採択されたルールが、ここに条文として加わっていきます。</p>
       <?php else: ?>
         <ol class="charter-preview">
-          <?php foreach (array_slice($articles, -3, 3, true) as $i => $a): ?>
+          <?php foreach (array_slice($articles, -3) as $a): ?>
             <li>
-              <a href="/manifesto.php#article-<?= $i + 1 ?>"><span class="article-no">第<?= $i + 1 ?>条</span><?= e($a['title']) ?></a>
-              <p><?= e($a['proposed_rule']) ?></p>
+              <a href="/manifesto.php#article-<?= (int) $a['number'] ?>"><span class="article-no">第<?= (int) $a['number'] ?>条</span><?= e($a['title']) ?></a>
+              <p><?= e(enacted_text($a['current'])['rule']) ?></p>
             </li>
           <?php endforeach; ?>
         </ol>
