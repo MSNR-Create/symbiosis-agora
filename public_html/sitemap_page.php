@@ -11,7 +11,7 @@ $threads = $pdo->query(
        (SELECT COUNT(*) FROM posts WHERE posts.thread_id = threads.id AND posts.status = 'published') AS post_count
      FROM threads WHERE status != 'draft' ORDER BY id ASC"
 )->fetchAll(PDO::FETCH_ASSOC);
-$groups = ['review' => [], 'passed' => [], 'rejected' => []];
+$groups = ['review' => [], 'passed' => [], 'revised' => [], 'rejected' => []];
 foreach ($threads as $t) {
     $groups[$t['status']][] = $t;
 }
@@ -41,7 +41,7 @@ page_header([
       </ul>
     </section>
 
-    <?php foreach (['review' => '議論中のスレッド', 'passed' => '採択されたスレッド', 'rejected' => '否決されたスレッド'] as $status => $label): ?>
+    <?php foreach (['review' => '議論中のスレッド', 'passed' => '採択されたスレッド', 'revised' => '作り直したスレッド', 'rejected' => '否決されたスレッド'] as $status => $label): ?>
       <?php if ($groups[$status]): ?>
         <section class="section">
           <h2><?= e($label) ?></h2>

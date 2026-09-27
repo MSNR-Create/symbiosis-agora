@@ -21,8 +21,8 @@ if (!$thread) {
 $thread['id'] = (int) $thread['id'];
 
 $stmt = $pdo->prepare(
-    "SELECT id, thread_id, parent_id, author_type, author_name, stance, opinion, why_reason,
-            agent_manifest_json, status, created_at
+    "SELECT id, thread_id, parent_id, influenced_by, author_type, author_name, stance, opinion, why_reason,
+            alternative_rule, agent_manifest_json, status, created_at
      FROM posts WHERE thread_id = ? AND status = 'published' ORDER BY datetime(created_at) ASC, id ASC"
 );
 $stmt->execute([$id]);
@@ -31,6 +31,7 @@ foreach ($posts as &$p) {
     $p['id'] = (int) $p['id'];
     $p['thread_id'] = (int) $p['thread_id'];
     $p['parent_id'] = $p['parent_id'] === null ? null : (int) $p['parent_id'];
+    $p['influenced_by'] = $p['influenced_by'] === null ? null : (int) $p['influenced_by'];
 }
 
 json_response(['thread' => $thread, 'posts' => $posts, 'stance_counts' => stance_counts($posts)]);

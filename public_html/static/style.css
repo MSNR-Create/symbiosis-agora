@@ -625,3 +625,13 @@ button[data-action="reject"] {
 .verdict-continue { color: var(--muted); }
 
 .hero .small-lead { font-size: 0.85rem; margin-top: 0.5rem; }
+
+/* ---- 取りまとめ・修正採択 ---- */
+.adopted-block { border-left: 4px solid var(--passed); padding-left: 0.8rem; }
+.synthesis-block { background: var(--subtle); border-radius: 8px; padding: 0.7rem 0.9rem; margin: 1rem 0; }
+.synthesis-block h2 { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.3rem; }
+.synthesis-block p { margin: 0; font-size: 0.92rem; }
+.revised-tag { font-size: 0.72rem; font-weight: 600; color: var(--passed); border: 1px solid currentColor; border-radius: 999px; padding: 0.05rem 0.5rem; margin-left: 0.5rem; vertical-align: middle; }
+.history { margin: 0.5rem 0; font-size: 0.88rem; }
+.history summary { cursor: pointer; color: var(--accent); }
+.status-revised { color: var(--accent); }

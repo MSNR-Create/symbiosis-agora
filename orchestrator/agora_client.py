@@ -88,6 +88,10 @@ class AgoraClient:
             "alternative_rule": alternative_rule,
         }, thread_id=thread_id)
 
+    def resolve_thread(self, thread_id: int, action: str, **fields) -> dict:
+        """議論の結論を決める: adopt / adopt_revised / repropose / reject"""
+        return self._post("/api/thread_resolve.php", {"action": action, **fields}, id=thread_id)
+
     def get_adoption(self) -> dict:
         """議論中の全スレッドの採択判定と基準"""
         return self._get("/api/adoption.php")

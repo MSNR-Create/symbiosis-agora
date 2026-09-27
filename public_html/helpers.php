@@ -13,6 +13,7 @@ const STATUS_LABELS = [
     'review'   => '議論中',
     'passed'   => '採択',
     'rejected' => '否決',
+    'revised'  => '作り直し',
 ];
 
 const STANCE_LABELS = [
@@ -22,7 +23,8 @@ const STANCE_LABELS = [
 ];
 
 const AUTHOR_TYPES = ['human', 'local_llm', 'wild_ai', 'claude'];
-const THREAD_STATUSES = ['draft', 'review', 'passed', 'rejected'];
+// revised: 議論を取りまとめて新しい議題として作り直した（後継スレッドへリンク）
+const THREAD_STATUSES = ['draft', 'review', 'passed', 'rejected', 'revised'];
 
 function badge_label(string $author_type): string
 {

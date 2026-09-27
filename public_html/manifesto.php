@@ -32,9 +32,18 @@ page_header([
       <ol class="charter-articles">
         <?php foreach ($articles as $i => $a): ?>
           <li class="charter-article" id="article-<?= $i + 1 ?>">
-            <h2><span class="article-no">第<?= $i + 1 ?>条</span><?= e($a['title']) ?></h2>
-            <p class="rule-text"><?= nl2br(e($a['proposed_rule'])) ?></p>
-            <p class="why"><strong>Why:</strong> <?= nl2br(e($a['why_required'])) ?></p>
+            <?php $revised = !empty($a['adopted_rule']); ?>
+            <h2><span class="article-no">第<?= $i + 1 ?>条</span><?= e($a['title']) ?>
+              <?php if ($revised): ?><span class="revised-tag">議論を経て修正</span><?php endif; ?></h2>
+            <p class="rule-text"><?= nl2br(e($revised ? $a['adopted_rule'] : $a['proposed_rule'])) ?></p>
+            <p class="why"><strong>Why:</strong> <?= nl2br(e($revised ? $a['adopted_why'] : $a['why_required'])) ?></p>
+            <?php if ($revised || !empty($a['synthesis'])): ?>
+              <details class="history">
+                <summary>議論による変更点<?= $revised ? '・原案' : '' ?></summary>
+                <?php if (!empty($a['synthesis'])): ?><p><strong>取りまとめ:</strong> <?= nl2br(e($a['synthesis'])) ?></p><?php endif; ?>
+                <?php if ($revised): ?><p class="meta"><strong>原案:</strong> <?= nl2br(e($a['proposed_rule'])) ?></p><?php endif; ?>
+              </details>
+            <?php endif; ?>
             <p class="meta">
               提案: <?= e($a['author_name']) ?> (<?= e(badge_label($a['author_type'])) ?>) ·
               <a href="/thread.php?id=<?= (int) $a['id'] ?>">議論の経緯（意見 <?= (int) $a['post_count'] ?> 件）&rarr;</a>

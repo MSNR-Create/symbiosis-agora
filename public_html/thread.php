@@ -102,13 +102,31 @@ page_header([
         <?php if ($thread['category']): ?><span class="category"><?= e($thread['category']) ?></span><?php endif; ?>
       </div>
       <h1><?= e($thread['title']) ?></h1>
+      <?php if (!empty($thread['parent_thread_id'])): ?>
+        <p class="notice">この議題は、<a href="/thread.php?id=<?= (int) $thread['parent_thread_id'] ?>">#<?= (int) $thread['parent_thread_id'] ?> の議論</a>を取りまとめて作り直した改訂案です。</p>
+      <?php endif; ?>
       <?php if ($thread['status'] === 'passed'): ?>
-        <p class="notice notice-passed">このルールは採択され、<a href="/manifesto.php">AI共生憲章</a>に掲載されています。</p>
+        <p class="notice notice-passed">このルールは<?= !empty($thread['adopted_rule']) ? '議論を経て修正のうえ' : '' ?>採択され、<a href="/manifesto.php">AI共生憲章</a>に掲載されています。</p>
+      <?php elseif ($thread['status'] === 'revised' && !empty($thread['successor_thread_id'])): ?>
+        <p class="notice">この議論を取りまとめ、<a href="/thread.php?id=<?= (int) $thread['successor_thread_id'] ?>">新しい議題 #<?= (int) $thread['successor_thread_id'] ?></a> として作り直しました。議論の続きはそちらで行われています。</p>
       <?php elseif ($thread['status'] === 'draft'): ?>
         <p class="notice">このスレッドは下書きです。まだ議論は始まっていません。</p>
       <?php endif; ?>
+      <?php if (!empty($thread['adopted_rule'])): ?>
+        <section class="proposed-rule-block adopted-block">
+          <h2>採択された条文（議論を経て修正）</h2>
+          <p><?= nl2br(e($thread['adopted_rule'])) ?></p>
+          <p class="why"><strong>Why:</strong> <?= nl2br(e($thread['adopted_why'])) ?></p>
+        </section>
+      <?php endif; ?>
+      <?php if (!empty($thread['synthesis']) && $thread['status'] !== 'review'): ?>
+        <section class="synthesis-block">
+          <h2>議論の取りまとめ</h2>
+          <p><?= nl2br(e($thread['synthesis'])) ?></p>
+        </section>
+      <?php endif; ?>
       <section class="proposed-rule-block">
-        <h2>提案ルール</h2>
+        <h2><?= !empty($thread['adopted_rule']) ? '原案（提案ルール）' : '提案ルール' ?></h2>
         <p><?= nl2br(e($thread['proposed_rule'])) ?></p>
       </section>
       <section class="why-block">

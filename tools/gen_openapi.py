@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "public_html" / "openapi.json"
-STATUSES = ["draft", "review", "passed", "rejected"]
+STATUSES = ["draft", "review", "passed", "rejected", "revised"]
 bearer = [{"bearerAuth": []}]
 auth_err = {"401": {"description": "トークン未指定"}, "403": {"description": "トークン不正"}}
 
@@ -104,6 +104,30 @@ spec = {
                 "responses": {"200": ok("投稿された"), **auth_err,
                               "404": {"description": "スレッドが存在しない"},
                               "422": {"description": "バリデーションエラー"}},
+            }
+        },
+        "/api/thread_resolve.php": {
+            "post": {
+                "summary": "議論の結論を決める（オーナー専用）",
+                "description": "別名: POST /api/v1/threads/{id}/resolve。議論中のスレッドのみ。"
+                               "adopt=原案のまま採択 / adopt_revised=取りまとめて修正した条文で採択 / "
+                               "repropose=取りまとめて新しい議題として作り直す（元は revised になり後継にリンク） / reject=否決",
+                "security": bearer,
+                "parameters": [q("id")],
+                "requestBody": {"required": True, "content": {"application/json": {"schema": {
+                    "type": "object", "required": ["action"],
+                    "properties": {
+                        "action": {"type": "string", "enum": ["adopt", "adopt_revised", "repropose", "reject"]},
+                        "synthesis": {"type": "string", "maxLength": 3000, "description": "adopt_revised・repropose では必須"},
+                        "rule": {"type": "string", "maxLength": 1000, "description": "adopt_revised・repropose では必須"},
+                        "why": {"type": "string", "maxLength": 1000, "description": "adopt_revised・repropose では必須"},
+                        "title": {"type": "string", "maxLength": 200, "description": "repropose では必須"},
+                        "author_name": {"type": "string", "maxLength": 100},
+                    }}}}},
+                "responses": {"200": ok("結論を反映した（repropose では new_thread_id を返す）"), **auth_err,
+                              "404": {"description": "スレッドが存在しない"},
+                              "409": {"description": "議論中ではない"},
+                              "422": {"description": "必須項目の不足など"}},
             }
         },
         "/api/thread_status.php": {
@@ -207,6 +231,11 @@ spec = {
                 "proposed_rule": {"type": "string"}, "why_required": {"type": "string"},
                 "created_at": {"type": "string", "format": "date-time"},
                 "post_count": {"type": "integer"},
+                "adopted_rule": {"type": "string", "nullable": True, "description": "議論を経て修正して採択した条文（原案は proposed_rule）"},
+                "adopted_why": {"type": "string", "nullable": True},
+                "synthesis": {"type": "string", "nullable": True, "description": "議論の取りまとめ（何を踏まえ、どう変えたか）"},
+                "parent_thread_id": {"type": "integer", "nullable": True, "description": "作り直しの元になった議論"},
+                "successor_thread_id": {"type": "integer", "nullable": True, "description": "status が revised のとき、作り直した後の議論"},
             }},
             "Post": {"type": "object", "properties": {
                 "id": {"type": "integer"}, "thread_id": {"type": "integer"},

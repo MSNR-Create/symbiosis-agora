@@ -387,34 +387,107 @@ async function loadAdoption() {
         ${dissent ? `<p class="hint">応答のない反対意見:</p><ul class="sub">${dissent}</ul>` : ''}
         ${alts ? `<p class="hint">代替案:</p><ul class="sub">${alts}</ul>` : ''}
         <div class="row">
-          <button type="button" class="btn-primary small" data-status="passed" data-id="${Number(t.thread.id)}">採択して憲章に載せる</button>
-          <button type="button" class="small" data-status="rejected" data-id="${Number(t.thread.id)}">否決</button>
+          <button type="button" class="btn-primary small" data-resolve="adopt" data-id="${Number(t.thread.id)}">原案のまま採択</button>
+          <button type="button" class="small" data-open-editor data-id="${Number(t.thread.id)}">取りまとめる</button>
+          <button type="button" class="small" data-resolve="reject" data-id="${Number(t.thread.id)}">否決</button>
           <a class="small" href="${esc(threadUrl(t.thread.id))}" target="_blank" rel="noopener">議論を見る ↗</a>
+        </div>
+        <div class="editor" data-editor="${Number(t.thread.id)}" hidden>
+          <div class="row">
+            <select class="model-select synth-model">${$('#screen-model').innerHTML}</select>
+            <button type="button" class="small" data-synthesize data-id="${Number(t.thread.id)}">LLMで取りまとめ案を作る</button>
+          </div>
+          <p class="hint synth-rec"></p>
+          <label class="field"><span>議論の取りまとめ（何を踏まえ、どう変えたか）</span><textarea data-f="synthesis" rows="4" maxlength="3000"></textarea></label>
+          <label class="field"><span>改良した条文</span><textarea data-f="rule" rows="3" maxlength="1000">${esc(t.thread.proposed_rule)}</textarea></label>
+          <label class="field"><span>その理由（Why）</span><textarea data-f="why" rows="3" maxlength="1000">${esc(t.thread.why_required || '')}</textarea></label>
+          <label class="field"><span>作り直す場合の議題タイトル</span><input data-f="title" maxlength="200" value="${esc(t.thread.title)}（改訂案）"></label>
+          <div class="row">
+            <button type="button" class="btn-primary small" data-resolve="adopt_revised" data-id="${Number(t.thread.id)}">修正して採択</button>
+            <button type="button" class="small" data-resolve="repropose" data-id="${Number(t.thread.id)}">作り直して再提案</button>
+          </div>
         </div>
       </li>`;
   }).join('') || '<li class="hint">議論中のスレッドはありません。</li>';
 }
 
+const RESOLVE_LABEL = {
+  adopt: '原案のまま採択', adopt_revised: '修正して採択', repropose: '作り直して再提案', reject: '否決',
+};
+
+function editorOf(id) {
+  return document.querySelector(`[data-editor="${Number(id)}"]`);
+}
+
 $('#adopt-list').addEventListener('click', async e => {
-  const btn = e.target.closest('button[data-status]');
+  // 取りまとめエディタの開閉
+  const open = e.target.closest('button[data-open-editor]');
+  if (open) {
+    const ed = editorOf(open.dataset.id);
+    ed.hidden = !ed.hidden;
+    const pref = loadPrefs().proposeModel;
+    if (pref && [...ed.querySelector('.synth-model').options].some(o => o.value === pref)) ed.querySelector('.synth-model').value = pref;
+    return;
+  }
+
+  // LLMで取りまとめ案を作る（押したときだけ実行。結果は下書きとしてエディタに入るだけ）
+  const synth = e.target.closest('button[data-synthesize]');
+  if (synth) {
+    const ed = editorOf(synth.dataset.id);
+    await startJob('/api/synthesis/start', { thread_id: Number(synth.dataset.id), model: ed.querySelector('.synth-model').value }, 'synthesis');
+    return;
+  }
+
+  // 結論を決める
+  const btn = e.target.closest('button[data-resolve]');
   if (!btn) return;
   const card = btn.closest('li');
+  const id = Number(btn.dataset.id);
+  const action = btn.dataset.resolve;
   const title = card.querySelector('.head').firstChild.textContent.trim();
-  const status = btn.dataset.status;
-  const notCandidate = !card.classList.contains(status === 'passed' ? 'verdict-adopt_candidate' : 'verdict-reject_candidate');
-  const msg = (status === 'passed' ? `「${title}」を採択し、AI共生憲章に載せますか？` : `「${title}」を否決しますか？`)
-    + (notCandidate ? '\n\n※このスレッドはまだ基準を満たしていません。' : '');
+  const ed = editorOf(id);
+  const f = name => ed.querySelector(`[data-f="${name}"]`).value.trim();
+  const body = { action };
+  if (action === 'adopt_revised' || action === 'repropose') {
+    Object.assign(body, { synthesis: f('synthesis'), rule: f('rule'), why: f('why') });
+    if (action === 'repropose') body.title = f('title');
+    const missing = Object.entries(body).filter(([k, v]) => k !== 'action' && !v).map(([k]) => k);
+    if (missing.length) return alert('次の項目を入力してください: ' + missing.join(', '));
+  } else if (!ed.hidden && f('synthesis')) {
+    body.synthesis = f('synthesis');   // 採択・否決にも取りまとめを添えられる
+  }
+  const candidate = card.classList.contains('verdict-adopt_candidate') || card.classList.contains('verdict-reject_candidate');
+  const msg = {
+    adopt: `「${title}」を原案のまま採択し、AI共生憲章に載せますか？`,
+    adopt_revised: `「${title}」を、編集した条文で採択し、AI共生憲章に載せますか？\n（原案と取りまとめもスレッドに残ります）`,
+    repropose: `「${title}」を取りまとめ、新しい議題「${body.title || ''}」として作り直しますか？\n（元の議論は「作り直し」で閉じ、新しい議題にリンクされます）`,
+    reject: `「${title}」を否決しますか？`,
+  }[action] + (candidate || action === 'repropose' ? '' : '\n\n※このスレッドはまだ採択の基準を満たしていません。');
   if (!confirm(msg)) return;
   card.querySelectorAll('button').forEach(b => { b.disabled = true; });
   try {
-    await api(`/api/threads/${Number(btn.dataset.id)}/status`, { method: 'POST', body: { status } });
-    addLocalLog(`${title} を${status === 'passed' ? '採択' : '否決'}しました`);
+    const res = await api(`/api/threads/${id}/resolve`, { method: 'POST', body });
+    addLocalLog(`${title}：${RESOLVE_LABEL[action]}しました` + (res.new_thread_id ? `（新しい議題 #${res.new_thread_id}）` : ''));
   } catch (err) {
     alert(err.message);
   }
   loadAdoption();
   loadThreads();
 });
+
+/** 取りまとめジョブが終わったら、結果を該当スレッドのエディタに入れる（下書き。決定は人が行う） */
+function applySynthesis(result) {
+  const ed = result && editorOf(result.thread_id);
+  if (!ed) return;
+  ed.hidden = false;
+  for (const k of ['synthesis', 'rule', 'why', 'title']) {
+    const v = k === 'synthesis' ? result.summary : result[k];
+    if (v) ed.querySelector(`[data-f="${k}"]`).value = v;
+  }
+  ed.querySelector('.synth-rec').textContent = `取りまとめ役の勧め: ${RESOLVE_LABEL[result.recommendation]}` +
+    (result.recommendation_reason ? `（${result.recommendation_reason}）` : '') + '。内容を確認・編集してから決定してください。';
+  ed.scrollIntoView({ block: 'nearest' });
+}
 
 $('#btn-reload-adopt').addEventListener('click', loadAdoption);
 
@@ -482,6 +555,9 @@ async function poll() {
     polling = null;
     loadStatus();
     loadThreads(s.result && s.result.thread_id);
+    if (jobKind === 'synthesis' && s.status === 'finished') {
+      applySynthesis(s.result);
+    }
     if (jobKind === 'propose' && s.status === 'finished' && proposeFollowUp && s.result && s.result.thread_id) {
       proposeFollowUp = false;
       addLocalLog(`続けて議論を開始します（スレッド #${s.result.thread_id}）`);

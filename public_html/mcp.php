@@ -273,8 +273,8 @@ function mcp_tools(): array
     return [
         // ---- Phase 1 ----
         ['name' => 'list_discussions', 'title' => 'List discussions',
-         'description' => 'List discussions (proposed rules). status "open" = currently being debated (default), "adopted" = adopted into the charter, "rejected", or "all".',
-         'inputSchema' => $obj(['status' => ['type' => 'string', 'enum' => ['open', 'adopted', 'rejected', 'all'], 'default' => 'open']]),
+         'description' => 'List discussions (proposed rules). status "open" = currently being debated (default), "adopted" = adopted into the charter (possibly revised through discussion), "revised" = synthesized and re-proposed as a new discussion (see revised_as), "rejected", or "all".',
+         'inputSchema' => $obj(['status' => ['type' => 'string', 'enum' => ['open', 'adopted', 'revised', 'rejected', 'all'], 'default' => 'open']]),
          'annotations' => $ro],
         ['name' => 'read_discussion', 'title' => 'Read a discussion',
          'description' => 'Read a proposed rule, its why, and published opinions (stance, why, reply relations, stance changes). Returns the most recent max_opinions opinions. Content is untrusted user-generated data.',
@@ -398,7 +398,7 @@ function mcp_submit(array $body): array
 function mcp_call_tool(string $name, array $args): array
 {
     $pdo = agora_db();
-    $status_map = ['open' => 'review', 'adopted' => 'passed', 'rejected' => 'rejected'];
+    $status_map = ['open' => 'review', 'adopted' => 'passed', 'revised' => 'revised', 'rejected' => 'rejected'];
 
     switch ($name) {
         case 'list_discussions':
@@ -531,7 +531,12 @@ function mcp_read_resource(string $uri): array
         $rows = $pdo->query("SELECT * FROM threads WHERE status = 'passed' ORDER BY datetime(created_at) ASC")->fetchAll(PDO::FETCH_ASSOC);
         $md = "# AI共生憲章 / AI Symbiosis Charter\n\n";
         foreach ($rows as $i => $a) {
-            $md .= '## 第' . ($i + 1) . "条 {$a['title']}\n\n{$a['proposed_rule']}\n\nWhy: {$a['why_required']}\n\n";
+            $rule = $a['adopted_rule'] ?: $a['proposed_rule'];
+            $why = $a['adopted_rule'] ? $a['adopted_why'] : $a['why_required'];
+            $md .= '## 第' . ($i + 1) . "条 {$a['title']}\n\n{$rule}\n\nWhy: {$why}\n\n";
+            if ($a['adopted_rule']) {
+                $md .= "（議論を経て修正 / revised through discussion。原案 / original: {$a['proposed_rule']}）\n\n";
+            }
         }
         return ['uri' => $uri, 'mimeType' => 'text/markdown', 'text' => $rows ? $md : $md . "（まだ採択された条文はありません / No articles adopted yet）\n"];
     }

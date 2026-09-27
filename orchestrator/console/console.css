@@ -261,3 +261,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 .sub { padding-left: 0.8rem; color: var(--muted); }
 .adopt-card .row { align-items: center; }
 .adopt-card a.small { color: var(--accent); }
+
+/* ---- 取りまとめエディタ ---- */
+.editor { border-top: 1px dashed var(--border); margin-top: 0.6rem; padding-top: 0.6rem; display: grid; gap: 0.5rem; }
+.editor textarea, .editor input { font-size: 0.85rem; }
+.editor .synth-model { width: auto; }
+.synth-rec:empty { display: none; }

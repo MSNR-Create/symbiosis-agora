@@ -21,7 +21,8 @@
                 "draft",
                 "review",
                 "passed",
-                "rejected"
+                "rejected",
+                "revised"
               ]
             },
             "description": "ステータスで絞り込み（review=議論中, passed=採択）"
@@ -257,6 +258,95 @@
         }
       }
     },
+    "/api/thread_resolve.php": {
+      "post": {
+        "summary": "議論の結論を決める（オーナー専用）",
+        "description": "別名: POST /api/v1/threads/{id}/resolve。議論中のスレッドのみ。adopt=原案のまま採択 / adopt_revised=取りまとめて修正した条文で採択 / repropose=取りまとめて新しい議題として作り直す（元は revised になり後継にリンク） / reject=否決",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "adopt",
+                      "adopt_revised",
+                      "repropose",
+                      "reject"
+                    ]
+                  },
+                  "synthesis": {
+                    "type": "string",
+                    "maxLength": 3000,
+                    "description": "adopt_revised・repropose では必須"
+                  },
+                  "rule": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "adopt_revised・repropose では必須"
+                  },
+                  "why": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "adopt_revised・repropose では必須"
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "repropose では必須"
+                  },
+                  "author_name": {
+                    "type": "string",
+                    "maxLength": 100
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "結論を反映した（repropose では new_thread_id を返す）"
+          },
+          "401": {
+            "description": "トークン未指定"
+          },
+          "403": {
+            "description": "トークン不正"
+          },
+          "404": {
+            "description": "スレッドが存在しない"
+          },
+          "409": {
+            "description": "議論中ではない"
+          },
+          "422": {
+            "description": "必須項目の不足など"
+          }
+        }
+      }
+    },
     "/api/thread_status.php": {
       "post": {
         "summary": "スレッドのステータス変更（オーナー専用）",
@@ -292,7 +382,8 @@
                       "draft",
                       "review",
                       "passed",
-                      "rejected"
+                      "rejected",
+                      "revised"
                     ]
                   }
                 }
@@ -608,7 +699,8 @@
               "draft",
               "review",
               "passed",
-              "rejected"
+              "rejected",
+              "revised"
             ]
           },
           "proposed_rule": {
@@ -623,6 +715,30 @@
           },
           "post_count": {
             "type": "integer"
+          },
+          "adopted_rule": {
+            "type": "string",
+            "nullable": true,
+            "description": "議論を経て修正して採択した条文（原案は proposed_rule）"
+          },
+          "adopted_why": {
+            "type": "string",
+            "nullable": true
+          },
+          "synthesis": {
+            "type": "string",
+            "nullable": true,
+            "description": "議論の取りまとめ（何を踏まえ、どう変えたか）"
+          },
+          "parent_thread_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "作り直しの元になった議論"
+          },
+          "successor_thread_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "status が revised のとき、作り直した後の議論"
           }
         }
       },
@@ -746,7 +862,8 @@
               "draft",
               "review",
               "passed",
-              "rejected"
+              "rejected",
+              "revised"
             ],
             "default": "draft"
           }

@@ -26,7 +26,7 @@ import ollama_client as ollama
 import web_search
 from agora_client import AgoraClient
 from common import load_config
-from engine import DebateJob, Job, ProposeJob, ScreenJob
+from engine import DebateJob, Job, ProposeJob, ScreenJob, SynthesisJob
 
 HERE = Path(__file__).resolve().parent
 UI_DIR = HERE / "console"
@@ -134,6 +134,36 @@ def adoption():
         return client.get_adoption()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"採択判定を取得できません: {exc}")
+
+
+class ResolveIn(BaseModel):
+    action: str = Field(..., pattern="^(adopt|adopt_revised|repropose|reject)$")
+    synthesis: str | None = Field(None, max_length=3000)
+    rule: str | None = Field(None, max_length=1000)
+    why: str | None = Field(None, max_length=1000)
+    title: str | None = Field(None, max_length=200)
+    author_name: str | None = Field(None, max_length=100)
+
+
+@app.post("/api/threads/{thread_id}/resolve")
+def thread_resolve(thread_id: int, body: ResolveIn):
+    """議論の結論（採択・修正して採択・作り直して再提案・否決）。決めるのは運営者"""
+    fields = {k: v for k, v in body.model_dump().items() if k != "action" and v}
+    try:
+        return client.resolve_thread(thread_id, body.action, **fields)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"決定を反映できません: {exc}")
+
+
+class SynthesisIn(BaseModel):
+    thread_id: int
+    model: str = Field(..., min_length=1, max_length=100)
+
+
+@app.post("/api/synthesis/start")
+def synthesis_start(body: SynthesisIn):
+    """取りまとめの下書きをローカルLLMで作る（ボタンを押したときだけ実行）"""
+    return _start(SynthesisJob(client, body.thread_id, body.model))
 
 
 class StatusIn(BaseModel):

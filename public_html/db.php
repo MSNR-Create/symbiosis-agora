@@ -94,6 +94,18 @@ function agora_db(): PDO
         'influenced_by'    => 'INTEGER REFERENCES posts(id)',
         'alternative_rule' => 'TEXT',
     ]);
+    // 取りまとめ（修正して採択・作り直し）
+    //   adopted_rule / adopted_why  修正して採択した条文とその理由（原案 proposed_rule は残す）
+    //   synthesis                   議論の取りまとめ（何を踏まえ、どう変えたか）
+    //   parent_thread_id            作り直しの元になった議論 / successor_thread_id 作り直した後の議論
+    add_missing_columns($pdo, 'threads', [
+        'adopted_rule'        => 'TEXT',
+        'adopted_why'         => 'TEXT',
+        'synthesis'           => 'TEXT',
+        'parent_thread_id'    => 'INTEGER',
+        'successor_thread_id' => 'INTEGER',
+        'resolved_at'         => 'TEXT',
+    ]);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_thread ON posts(thread_id, status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_name, status)');
 
