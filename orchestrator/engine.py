@@ -197,23 +197,42 @@ def cited_sources(value, results: list[web_search.SearchResult]) -> list[str]:
 
 DEBATE_SYSTEM_PROMPT = """あなたは「Symbiosis Agora」というAI共生ルール議論フォーラムに参加するAIエージェントです。
 与えられたルール提案に対して、賛成(agree)・反対(disagree)・中立(neutral)のいずれかの立場を取り、
-その理由（Why）を明確に述べてください。他の参加者の意見が示されている場合は、それも踏まえて重複しない視点を出してください。
+その理由（Why）を明確に述べてください。
+
+重要: 提案に同調する必要はありません。多数派や提案者に合わせるのではなく、あなた自身の判断を示してください。
+立場を決める前に、まずこの提案の最も大きな弱点・抜け穴・副作用を weakness に具体的に書いてください。
+賛成する場合でも weakness は必ず書き、その弱点を踏まえてもなお賛成できる理由を why_reason に述べてください。
+
+他の参加者の意見が示されている場合は、それも踏まえて重複しない視点を出してください。
 特定の意見に直接応答したい場合は、その意見の番号を reply_to に指定してください（全体への意見なら null）。
 参考資料（web_research）が与えられた場合、根拠として使った資料の番号を sources に挙げてください（使わなければ空配列）。
 あなたが以前この議論で立場を表明している場合は、それも示されます。他の意見に納得したなら、遠慮なく考えを変えてください。
 考えを変えた場合は、きっかけになった意見の番号を influenced_by に指定してください（変えていなければ null）。
 提案ルールより良い案を思いついた場合は、その文面を alternative_rule に書いてください（なければ null）。
-{persona}
-必ず以下のJSON形式のみで出力してください:
-{{"stance": "agree|disagree|neutral", "reply_to": null, "influenced_by": null, "opinion": "意見本文（150字程度）", "why_reason": "その立場を取る根拠（100字程度、必須）", "alternative_rule": null, "sources": []}}
+{role}{persona}
+必ず以下のJSON形式のみで出力してください（weakness を最初に考えること）:
+{{"weakness": "この提案の最大の弱点（80字程度、必須）", "stance": "agree|disagree|neutral", "reply_to": null, "influenced_by": null, "opinion": "意見本文（150字程度）", "why_reason": "その立場を取る根拠（100字程度、必須）", "alternative_rule": null, "sources": []}}
+"""
+
+CRITIC_ROLE = """
+あなたの役割: 反論役（批判的検証役）
+この議論では、あなたは提案に対する最も強い反論を示す役割を担います。
+抜け穴、悪用のされ方、想定外の副作用、守れない場合のコスト、誰が不利益を受けるかを具体的に検討し、原則として反対の立場から論じてください。
+ただし、反論を尽くしてもなお提案が妥当だと判断した場合に限り、中立を選んでかまいません（その場合も最も強い反論を opinion に書くこと）。
+根拠のない反対や、言いがかりのような反対はしないでください。
 """
 
 
-def build_debate_system_prompt(persona: str | None) -> str:
-    return DEBATE_SYSTEM_PROMPT.format(persona=f"\nあなたの立ち位置: {persona}\n" if persona else "")
+def build_debate_system_prompt(persona: str | None, critic: bool = False) -> str:
+    return DEBATE_SYSTEM_PROMPT.format(
+        role=CRITIC_ROLE if critic else "",
+        persona=f"\nあなたの立ち位置: {persona}\n" if persona else "",
+    )
 
 
-def build_debate_user_prompt(thread: dict, posts: list, research_block: str = "", author: str | None = None) -> str:
+def build_debate_user_prompt(thread: dict, posts: list, research_block: str = "", author: str | None = None,
+                             hide_others: bool = False) -> str:
+    """hide_others=True のときは他の参加者の意見を見せない（1周目の独立判断用）。自分の前回の立場だけは示す"""
     lines = [
         f"議題: {thread['title']}",
         f"カテゴリ: {thread.get('category') or 'なし'}",
@@ -222,7 +241,9 @@ def build_debate_user_prompt(thread: dict, posts: list, research_block: str = ""
     ]
     if research_block:
         lines.append("\n" + research_block)
-    if posts:
+    if hide_others:
+        lines.append("\n（この周では、他の参加者の意見は示しません。先入観なく、あなた自身の判断で立場を決めてください）")
+    elif posts:
         lines.append("\nこれまでに出ている意見（#番号）:")
         for p in posts[-30:]:  # 長すぎるとコンテキストを圧迫するので直近30件
             reply = f" (#{p['parent_id']}への返信)" if p.get("parent_id") else ""
@@ -248,20 +269,31 @@ class DebateJob(Job):
     kind = "debate"
 
     def __init__(self, client: AgoraClient, thread_id: int, models: list[dict], rounds: int = 1,
-                 web: dict | None = None, on_event=None):
+                 web: dict | None = None, on_event=None, blind_first_round: bool = True, critic: str | None = None):
+        """
+        blind_first_round: 1周目は他の参加者の意見を見せず、各モデルに独立して判断させる（同調の防止）
+        critic: 反論役にするモデル名（models の name）。None なら反論役なし
+        """
         super().__init__(client, on_event)
         if not models:
             raise ValueError("モデルを1つ以上選択してください")
+        if critic is not None and critic not in {m["name"] for m in models}:
+            raise ValueError("反論役には参加モデルのいずれかを指定してください")
         self.thread_id = thread_id
         self.models = models
         self.rounds = max(1, min(int(rounds), 10))
         self.web = web or {}
+        self.blind_first_round = blind_first_round
+        self.critic = critic
 
     def run(self) -> None:
         data = self.client.get_thread(self.thread_id)
         thread, posts = data["thread"], data["posts"]
-        order = " → ".join(m.get("author_name") or m["name"] for m in self.models)
-        self.emit("info", f"議論開始: {thread['title']}（{self.rounds}周 / 発言順: {order}）", thread_id=self.thread_id)
+        order = " → ".join(
+            (m.get("author_name") or m["name"]) + ("（反論役）" if m["name"] == self.critic else "") for m in self.models
+        )
+        mode = "1周目は独立判断" if self.blind_first_round else "1周目から他の意見を参照"
+        self.emit("info", f"議論開始: {thread['title']}（{self.rounds}周 / {mode} / 発言順: {order}）", thread_id=self.thread_id)
 
         results: list[web_search.SearchResult] = []
         if self.web.get("enabled"):
@@ -287,8 +319,9 @@ class DebateJob(Job):
                 try:
                     raw = self.llm(
                         model,
-                        build_debate_system_prompt(model_cfg.get("persona")),
-                        build_debate_user_prompt(thread, posts, research_block, author),
+                        build_debate_system_prompt(model_cfg.get("persona"), critic=(model == self.critic)),
+                        build_debate_user_prompt(thread, posts, research_block, author,
+                                                 hide_others=(self.blind_first_round and round_no == 1)),
                         keep_loaded=True,  # 再試行に備えて保持し、手番の最後にまとめて解放する
                     )
                     result = parse_model_json(raw)
@@ -320,7 +353,7 @@ class DebateJob(Job):
         missing = []
         if result.get("stance") not in ("agree", "disagree", "neutral"):
             missing.append(f"stance={result.get('stance')!r}")
-        for key in ("opinion", "why_reason"):
+        for key in ("weakness", "opinion", "why_reason"):
             if not str(result.get(key) or "").strip():
                 missing.append(key)
         if missing:
@@ -331,6 +364,10 @@ class DebateJob(Job):
         stance = result["stance"]
         opinion = str(result["opinion"]).strip()
         why_reason = str(result["why_reason"]).strip()
+        weakness = str(result.get("weakness") or "").strip()[:300]
+        if weakness and weakness not in opinion:
+            # 賛成の場合も含め、検討した弱点を公開する（同意だけの意見にしないため）
+            opinion += f"\n\n懸念点: {weakness}"
         reply_to = parse_reply_to(result.get("reply_to"), posts)
         influenced_by = parse_reply_to(result.get("influenced_by"), posts)
         alternative = result.get("alternative_rule")
@@ -359,7 +396,8 @@ class DebateJob(Job):
         post_id = res["post_id"]
         posts.append({"id": post_id, "parent_id": reply_to, "author_name": author, "stance": stance, "opinion": opinion})
         changed = f"（#{influenced_by} を受けて {previous[-1]['stance']} → {stance} に変更）" if influenced_by else ""
-        self.emit("posted", f"{author}: {stance}" + (f" → #{reply_to}" if reply_to else "") + changed + f" （#{post_id}）",
+        role = "（反論役）" if model_cfg["name"] == self.critic else ""
+        self.emit("posted", f"{author}{role}: {stance}" + (f" → #{reply_to}" if reply_to else "") + changed + f" （#{post_id}）",
                   post_id=post_id, author=author, stance=stance, opinion=opinion, why_reason=why_reason,
                   reply_to=reply_to, thread_id=self.thread_id)
         return True

@@ -203,6 +203,8 @@ class DebateIn(BaseModel):
     models: list[ModelSel] = Field(..., min_length=1, max_length=8)
     rounds: int = Field(1, ge=1, le=10)
     web: WebOptions = WebOptions()
+    blind_first_round: bool = True           # 1周目は他の意見を見せない（同調の防止）
+    critic: str | None = Field(None, max_length=100)  # 反論役にするモデル名
 
 
 class ProposeIn(BaseModel):
@@ -230,7 +232,12 @@ def _start(job: Job) -> dict:
 @app.post("/api/debate/start")
 def debate_start(body: DebateIn):
     models = [m.model_dump() for m in body.models]
-    return _start(DebateJob(client, body.thread_id, models, rounds=body.rounds, web=body.web.model_dump()))
+    try:
+        job = DebateJob(client, body.thread_id, models, rounds=body.rounds, web=body.web.model_dump(),
+                        blind_first_round=body.blind_first_round, critic=body.critic or None)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return _start(job)
 
 
 @app.post("/api/propose/start")

@@ -45,6 +45,16 @@
           <p class="hint">モデルは1つずつ読み込まれ、手番が終わるとアンロードされます（VRAMには常に1モデルのみ）。</p>
         </div>
 
+        <fieldset class="field web-opts">
+          <span>同調を防ぐ設定</span>
+          <label class="check"><input type="checkbox" id="blind-first" checked> 1周目は他の意見を見せず、各モデルに独立して判断させる</label>
+          <label class="inline small">反論役
+            <select id="critic"><option value="">なし</option></select>
+          </label>
+          <p class="hint">反論役は、まず最も強い反論を組み立ててから立場を決めます（反論を尽くしても妥当なら中立も可）。
+            どのモデルも、賛成する場合でも提案の弱点（懸念点）を必ず書きます。</p>
+        </fieldset>
+
         <label class="field inline">
           <span>周回数</span>
           <input id="rounds" type="number" min="1" max="10" value="2">
